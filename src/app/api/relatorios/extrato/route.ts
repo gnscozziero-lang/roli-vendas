@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Vencimento anterior para label do relatório
+    // Vencimento anterior para label
     const prevResult = await sql`
       SELECT MAX(due_date) as prev_due FROM orders WHERE due_date < ${due_date}
     `
@@ -19,15 +19,30 @@ export async function GET(req: NextRequest) {
       ? (typeof prevDue === 'string' ? prevDue.substring(0, 10) : prevDue.toISOString().substring(0, 10))
       : '2000-01-01'
 
-    // Pedidos do ciclo
+    // Todos os pedidos de ciclos ANTERIORES ao selecionado
+    const allPrevOrders = await sql`
+      SELECT total_amount FROM orders WHERE due_date < ${due_date}
+    `
+    // Todos os pagamentos referentes a ciclos ANTERIORES ao selecionado
+    const allPrevPayments = await sql`
+      SELECT amount FROM payments
+      WHERE due_date_ref < ${due_date}
+         OR (due_date_ref IS NULL AND payment_date <= ${prevDueStr})
+    `
+
+    // Saldo anterior = soma pedidos anteriores - soma pagamentos anteriores
+    const totalPrevOrders   = (allPrevOrders as any[]).reduce((s: number, o: any) => s + Number(o.total_amount), 0)
+    const totalPrevPayments = (allPrevPayments as any[]).reduce((s: number, p: any) => s + Number(p.amount), 0)
+    const saldoAnterior = Math.max(0, totalPrevOrders - totalPrevPayments)
+
+    // Pedidos do ciclo selecionado
     const orders = await sql`
       SELECT id, order_date, due_date, total_amount, description
       FROM orders WHERE due_date = ${due_date}
       ORDER BY order_date ASC
     `
 
-    // Pagamentos referentes a este vencimento (usando due_date_ref)
-    // Fallback: se due_date_ref for nulo, usa a lógica antiga de período
+    // Pagamentos referentes a este vencimento
     const payments = await sql`
       SELECT id, payment_date, amount, notes, due_date_ref
       FROM payments
@@ -36,7 +51,12 @@ export async function GET(req: NextRequest) {
       ORDER BY payment_date ASC
     `
 
-    return NextResponse.json({ orders, payments, prevDue: prevDueStr })
+    return NextResponse.json({
+      orders,
+      payments,
+      prevDue: prevDueStr,
+      saldoAnterior,
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
