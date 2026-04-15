@@ -7,11 +7,7 @@ import { getDueDateFromString } from '@/lib/billing'
 // ── Items ──────────────────────────────────────────────────────────────────
 
 export async function updateItemPrice(id: string, unit_price: number) {
-  await sql`
-    UPDATE items
-    SET unit_price = ${unit_price}, updated_at = NOW()
-    WHERE id = ${id}
-  `
+  await sql`UPDATE items SET unit_price = ${unit_price}, updated_at = NOW() WHERE id = ${id}`
   revalidatePath('/itens')
   revalidatePath('/pedidos')
 }
@@ -44,7 +40,6 @@ export async function createOrder(
   lines: OrderLineInput[]
 ) {
   if (!lines.length) throw new Error('Pedido vazio')
-
   const total_amount = lines.reduce((s, l) => s + l.total_price, 0)
   const due_date     = getDueDateFromString(order_date)
 
@@ -62,6 +57,63 @@ export async function createOrder(
     `
   }
 
+  revalidatePath('/')
+  revalidatePath('/pedidos')
+}
+
+export async function updateOrder(
+  id: string,
+  order_date: string,
+  description: string,
+  lines: OrderLineInput[]
+) {
+  const total_amount = lines.length > 0
+    ? lines.reduce((s, l) => s + l.total_price, 0)
+    : null
+
+  const due_date = getDueDateFromString(order_date)
+
+  // Se vieram linhas de itens, recalcula total a partir delas
+  // Se não vieram (pedido importado editado só com total manual), usa o valor passado
+  if (lines.length > 0) {
+    await sql`
+      UPDATE orders SET order_date = ${order_date}, due_date = ${due_date},
+        total_amount = ${total_amount}, description = ${description}
+      WHERE id = ${id}
+    `
+    // Apaga itens antigos e reinsere
+    await sql`DELETE FROM order_items WHERE order_id = ${id}`
+    for (const line of lines) {
+      await sql`
+        INSERT INTO order_items (order_id, item_id, item_name, quantity, unit_price, total_price)
+        VALUES (${id}, ${line.item_id}, ${line.item_name}, ${line.quantity}, ${line.unit_price}, ${line.total_price})
+      `
+    }
+  } else {
+    // Pedido importado — só atualiza data e descrição, mantém total
+    await sql`
+      UPDATE orders SET order_date = ${order_date}, due_date = ${due_date},
+        description = ${description}
+      WHERE id = ${id}
+    `
+  }
+
+  revalidatePath('/')
+  revalidatePath('/pedidos')
+}
+
+export async function updateOrderImported(
+  id: string,
+  order_date: string,
+  description: string,
+  total_amount: number
+) {
+  const due_date = getDueDateFromString(order_date)
+  await sql`
+    UPDATE orders SET order_date = ${order_date}, due_date = ${due_date},
+      total_amount = ${total_amount}, description = ${description}
+    WHERE id = ${id}
+  `
   revalidatePath('/')
   revalidatePath('/pedidos')
 }
@@ -94,8 +146,7 @@ export async function runImport(seedJson: string) {
 
   for (const item of seed.items) {
     await sql`
-      INSERT INTO items (name, unit_price)
-      VALUES (${item.name}, ${item.unit_price})
+      INSERT INTO items (name, unit_price) VALUES (${item.name}, ${item.unit_price})
       ON CONFLICT (name) DO UPDATE SET unit_price = EXCLUDED.unit_price, updated_at = NOW()
     `
   }
