@@ -2,14 +2,13 @@ import { sql } from '@/lib/db'
 import { formatCurrency, formatDateBR } from '@/lib/billing'
 import NovoPedidoForm from './NovoPedidoForm'
 import DeleteButton from './DeleteButton'
-import type { Order, Item } from '@/types'
 
 export const revalidate = 0
 
 export default async function PedidosPage() {
   const [orders, items] = await Promise.all([
-    sql<Order[]>`SELECT id, order_date, due_date, total_amount, description, imported FROM orders ORDER BY order_date DESC`,
-    sql<Item[]>`SELECT * FROM items WHERE active = true ORDER BY name`,
+    sql`SELECT id, order_date, due_date, total_amount, description, imported FROM orders ORDER BY order_date DESC`,
+    sql`SELECT * FROM items WHERE active = true ORDER BY name`,
   ])
 
   return (
@@ -21,7 +20,7 @@ export default async function PedidosPage() {
 
       <div className="card p-6">
         <h2 className="font-semibold text-gray-800 mb-5">Novo Pedido</h2>
-        <NovoPedidoForm items={items} />
+        <NovoPedidoForm items={items as any[]} />
       </div>
 
       <div className="card overflow-hidden">
@@ -44,14 +43,12 @@ export default async function PedidosPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {orders.map(o => (
+              {(orders as any[]).map((o: any) => (
                 <tr key={o.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-3 text-gray-700 whitespace-nowrap">{formatDateBR(o.order_date)}</td>
                   <td className="px-6 py-3 text-gray-600 max-w-xs truncate">{o.description || '—'}</td>
                   <td className="px-6 py-3 text-gray-700 whitespace-nowrap">{formatDateBR(o.due_date)}</td>
-                  <td className="px-6 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">
-                    {formatCurrency(Number(o.total_amount))}
-                  </td>
+                  <td className="px-6 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(Number(o.total_amount))}</td>
                   <td className="px-6 py-3 text-center">
                     {o.imported
                       ? <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">importado</span>
@@ -63,9 +60,7 @@ export default async function PedidosPage() {
                 </tr>
               ))}
               {!orders.length && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-400">Nenhum pedido registrado.</td>
-                </tr>
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-400">Nenhum pedido registrado.</td></tr>
               )}
             </tbody>
           </table>

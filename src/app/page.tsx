@@ -1,21 +1,20 @@
 import { sql } from '@/lib/db'
 import { calculateBalances, formatCurrency, formatDateBR } from '@/lib/billing'
 import Link from 'next/link'
-import type { Order, Payment } from '@/types'
 
 export const revalidate = 0
 
 export default async function DashboardPage() {
   const [orders, payments, settings, recentOrders, recentPayments] = await Promise.all([
-    sql<{ due_date: string; total_amount: number }[]>`SELECT due_date, total_amount FROM orders`,
-    sql<{ amount: number }[]>`SELECT amount FROM payments`,
-    sql<{ key: string; value: string }[]>`SELECT key, value FROM settings`,
-    sql<Order[]>`SELECT id, order_date, due_date, total_amount, description, imported FROM orders ORDER BY order_date DESC LIMIT 8`,
-    sql<Payment[]>`SELECT id, payment_date, amount, notes, imported FROM payments ORDER BY payment_date DESC LIMIT 8`,
+    sql`SELECT due_date, total_amount FROM orders`,
+    sql`SELECT amount FROM payments`,
+    sql`SELECT key, value FROM settings`,
+    sql`SELECT id, order_date, due_date, total_amount, description, imported FROM orders ORDER BY order_date DESC LIMIT 8`,
+    sql`SELECT id, payment_date, amount, notes, imported FROM payments ORDER BY payment_date DESC LIMIT 8`,
   ])
 
-  const initialBalance = Number(settings.find(s => s.key === 'initial_balance')?.value ?? 0)
-  const summary = calculateBalances(orders, payments, initialBalance)
+  const initialBalance = Number((settings as any[]).find((s: any) => s.key === 'initial_balance')?.value ?? 0)
+  const summary = calculateBalances(orders as any[], payments as any[], initialBalance)
 
   return (
     <div className="space-y-8">
@@ -31,7 +30,6 @@ export default async function DashboardPage() {
             {formatCurrency(summary.total_open)}
           </p>
         </div>
-
         <div className="card p-6">
           <p className="text-sm font-medium text-gray-500">Próximo Vencimento</p>
           {summary.next_due_date ? (
@@ -43,7 +41,6 @@ export default async function DashboardPage() {
             <p className="text-lg text-green-700 font-semibold mt-1">Sem vencimentos</p>
           )}
         </div>
-
         <div className="card p-6">
           <p className="text-sm font-medium text-gray-500">Em Atraso</p>
           <p className={`text-3xl font-bold mt-1 ${summary.overdue_amount > 0 ? 'text-red-600' : 'text-green-700'}`}>
@@ -72,13 +69,11 @@ export default async function DashboardPage() {
                     <td className="py-2 text-right text-gray-700">{formatCurrency(c.total_orders)}</td>
                     <td className="py-2 text-right font-semibold text-red-600">{formatCurrency(c.remaining)}</td>
                     <td className="py-2 text-center">
-                      {c.is_next_due ? (
-                        <span className="inline-block px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-800 font-medium">Próximo</span>
-                      ) : c.is_overdue ? (
-                        <span className="inline-block px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-medium">Vencido</span>
-                      ) : (
-                        <span className="inline-block px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600 font-medium">Futuro</span>
-                      )}
+                      {c.is_next_due
+                        ? <span className="inline-block px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-800 font-medium">Próximo</span>
+                        : c.is_overdue
+                        ? <span className="inline-block px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-medium">Vencido</span>
+                        : <span className="inline-block px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-600 font-medium">Futuro</span>}
                     </td>
                   </tr>
                 ))}
@@ -96,7 +91,7 @@ export default async function DashboardPage() {
           </div>
           {recentOrders.length > 0 ? (
             <div className="space-y-2">
-              {recentOrders.map(o => (
+              {(recentOrders as any[]).map((o: any) => (
                 <div key={o.id} className="flex justify-between items-center text-sm py-1.5 border-b border-gray-50 last:border-0">
                   <div>
                     <span className="text-gray-700">{formatDateBR(o.order_date)}</span>
@@ -119,7 +114,7 @@ export default async function DashboardPage() {
           </div>
           {recentPayments.length > 0 ? (
             <div className="space-y-2">
-              {recentPayments.map(p => (
+              {(recentPayments as any[]).map((p: any) => (
                 <div key={p.id} className="flex justify-between items-center text-sm py-1.5 border-b border-gray-50 last:border-0">
                   <span className="text-gray-700">{formatDateBR(p.payment_date)}</span>
                   <span className="font-semibold text-green-700">{formatCurrency(Number(p.amount))}</span>

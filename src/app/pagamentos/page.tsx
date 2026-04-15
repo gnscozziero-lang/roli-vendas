@@ -2,19 +2,18 @@ import { sql } from '@/lib/db'
 import { formatCurrency, formatDateBR, calculateBalances } from '@/lib/billing'
 import NovoPagamentoForm from './NovoPagamentoForm'
 import DeletePgtoButton from './DeletePgtoButton'
-import type { Payment } from '@/types'
 
 export const revalidate = 0
 
 export default async function PagamentosPage() {
   const [payments, orders, settings] = await Promise.all([
-    sql<Payment[]>`SELECT id, payment_date, amount, notes, imported FROM payments ORDER BY payment_date DESC`,
-    sql<{ due_date: string; total_amount: number }[]>`SELECT due_date, total_amount FROM orders`,
-    sql<{ key: string; value: string }[]>`SELECT key, value FROM settings`,
+    sql`SELECT id, payment_date, amount, notes, imported FROM payments ORDER BY payment_date DESC`,
+    sql`SELECT due_date, total_amount FROM orders`,
+    sql`SELECT key, value FROM settings`,
   ])
 
-  const initialBalance = Number(settings.find(s => s.key === 'initial_balance')?.value ?? 0)
-  const summary = calculateBalances(orders, payments, initialBalance)
+  const initialBalance = Number((settings as any[]).find((s: any) => s.key === 'initial_balance')?.value ?? 0)
+  const summary = calculateBalances(orders as any[], payments as any[], initialBalance)
 
   return (
     <div className="space-y-8">
@@ -69,13 +68,11 @@ export default async function PagamentosPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {payments.map(p => (
+              {(payments as any[]).map((p: any) => (
                 <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-3 text-gray-700 whitespace-nowrap">{formatDateBR(p.payment_date)}</td>
                   <td className="px-6 py-3 text-gray-500">{p.notes || '—'}</td>
-                  <td className="px-6 py-3 text-right font-semibold text-green-700 whitespace-nowrap">
-                    {formatCurrency(Number(p.amount))}
-                  </td>
+                  <td className="px-6 py-3 text-right font-semibold text-green-700 whitespace-nowrap">{formatCurrency(Number(p.amount))}</td>
                   <td className="px-6 py-3 text-center">
                     {p.imported
                       ? <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">importado</span>
@@ -87,9 +84,7 @@ export default async function PagamentosPage() {
                 </tr>
               ))}
               {!payments.length && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-400">Nenhum pagamento registrado.</td>
-                </tr>
+                <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">Nenhum pagamento registrado.</td></tr>
               )}
             </tbody>
           </table>

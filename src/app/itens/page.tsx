@@ -5,6 +5,7 @@ export const revalidate = 0
 
 export default async function ItensPage() {
   const items = await sql`SELECT * FROM items ORDER BY name`
+
   return (
     <div className="space-y-8">
       <div>
