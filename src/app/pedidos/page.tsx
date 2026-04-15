@@ -1,7 +1,6 @@
 import { sql } from '@/lib/db'
-import { formatCurrency, formatDateBR } from '@/lib/billing'
 import NovoPedidoForm from './NovoPedidoForm'
-import DeleteButton from './DeleteButton'
+import PedidosTable from './PedidosTable'
 
 export const revalidate = 0
 
@@ -30,41 +29,7 @@ export default async function PedidosPage() {
             <span className="ml-2 text-sm font-normal text-gray-400">({orders.length} registros)</span>
           </h2>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr className="text-left text-gray-500">
-                <th className="px-6 py-3 font-medium">Data</th>
-                <th className="px-6 py-3 font-medium">Descrição</th>
-                <th className="px-6 py-3 font-medium">Vencimento</th>
-                <th className="px-6 py-3 font-medium text-right">Valor</th>
-                <th className="px-6 py-3 font-medium text-center">Origem</th>
-                <th className="px-6 py-3 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {(orders as any[]).map((o: any) => (
-                <tr key={o.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-3 text-gray-700 whitespace-nowrap">{formatDateBR(o.order_date)}</td>
-                  <td className="px-6 py-3 text-gray-600 max-w-xs truncate">{o.description || '—'}</td>
-                  <td className="px-6 py-3 text-gray-700 whitespace-nowrap">{formatDateBR(o.due_date)}</td>
-                  <td className="px-6 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">{formatCurrency(Number(o.total_amount))}</td>
-                  <td className="px-6 py-3 text-center">
-                    {o.imported
-                      ? <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">importado</span>
-                      : <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium">manual</span>}
-                  </td>
-                  <td className="px-6 py-3 text-right">
-                    {!o.imported && <DeleteButton id={o.id} type="order" />}
-                  </td>
-                </tr>
-              ))}
-              {!orders.length && (
-                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-400">Nenhum pedido registrado.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <PedidosTable orders={orders as any[]} items={items as any[]} />
       </div>
     </div>
   )
