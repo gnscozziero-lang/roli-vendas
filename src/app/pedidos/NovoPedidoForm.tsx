@@ -69,7 +69,7 @@ export default function NovoPedidoForm({ items }: Props) {
           </p>
         </div>
         <input
-          type="number" min="0" step={isHardware ? '1' : '0.5'}
+          type="text" inputMode="numeric" pattern="[0-9]*\.?[0-9]*"
           value={qty}
           onChange={e => setQty(item.id, e.target.value)}
           placeholder="0"

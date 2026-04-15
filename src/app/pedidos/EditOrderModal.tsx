@@ -161,7 +161,7 @@ export default function EditOrderModal({ order, items, onClose }: Props) {
                             {qty ? <span className="ml-2 text-green-700 font-semibold">= {formatCurrency(sub)}</span> : ''}
                           </p>
                         </div>
-                        <input type="number" min="0" step="0.5" value={qty}
+                        <input type="text" inputMode="numeric" pattern="[0-9]*\.?[0-9]*" value={qty}
                           onChange={e => setQty(item.id, e.target.value)}
                           placeholder="0"
                           className="w-28 rounded-md border border-gray-300 px-2 py-1 text-sm text-right focus:border-green-600 focus:ring-1 focus:ring-green-600 focus:outline-none"
@@ -189,7 +189,7 @@ export default function EditOrderModal({ order, items, onClose }: Props) {
                               {qty ? <span className="ml-2 text-green-700 font-semibold">= {formatCurrency(sub)}</span> : ''}
                             </p>
                           </div>
-                          <input type="number" min="0" step="1" value={qty}
+                          <input type="text" inputMode="numeric" pattern="[0-9]*" value={qty}
                             onChange={e => setQty(item.id, e.target.value)}
                             placeholder="0"
                             className="w-28 rounded-md border border-gray-300 px-2 py-1 text-sm text-right focus:border-green-600 focus:ring-1 focus:ring-green-600 focus:outline-none"
