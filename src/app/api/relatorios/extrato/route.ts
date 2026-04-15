@@ -10,7 +10,18 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Pedidos do ciclo
+    // Busca o vencimento anterior (o maior due_date menor que o atual)
+    const prevResult = await sql`
+      SELECT MAX(due_date) as prev_due
+      FROM orders
+      WHERE due_date < ${due_date}
+    `
+    const prevDue = (prevResult as any[])[0]?.prev_due
+    const prevDueStr = prevDue
+      ? (typeof prevDue === 'string' ? prevDue.substring(0, 10) : prevDue.toISOString().substring(0, 10))
+      : '2000-01-01'
+
+    // Pedidos do ciclo (com esse due_date)
     const orders = await sql`
       SELECT id, order_date, due_date, total_amount, description
       FROM orders
@@ -18,20 +29,16 @@ export async function GET(req: NextRequest) {
       ORDER BY order_date ASC
     `
 
-    // Pagamentos: buscamos todos os pagamentos e aplicamos ao ciclo
-    // Para o extrato, mostramos os pagamentos que ocorreram no mesmo
-    // período (entre o vencimento anterior e este vencimento)
-    // Simplificado: todos os pagamentos feitos até a data de vencimento
-    // que ainda não foram "consumidos" por ciclos anteriores.
-    // Na prática, mostramos os pagamentos realizados no período do ciclo.
+    // Pagamentos entre o vencimento anterior (exclusive) e este vencimento (inclusive)
     const payments = await sql`
       SELECT id, payment_date, amount, notes
       FROM payments
-      WHERE payment_date <= ${due_date}
+      WHERE payment_date > ${prevDueStr}
+        AND payment_date <= ${due_date}
       ORDER BY payment_date ASC
     `
 
-    return NextResponse.json({ orders, payments })
+    return NextResponse.json({ orders, payments, prevDue: prevDueStr })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
