@@ -1,6 +1,7 @@
 import { sql } from '@/lib/db'
 import { calculateBalances, formatCurrency, formatDateBR } from '@/lib/billing'
 import Link from 'next/link'
+import PrintButton from './PrintButton'
 
 export const revalidate = 0
 
@@ -18,9 +19,14 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-1">Resumo financeiro</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">Resumo financeiro</p>
+        </div>
+        <div className="print:hidden">
+          <PrintButton />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -87,16 +93,16 @@ export default async function DashboardPage() {
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-800">Últimos Pedidos</h2>
-            <Link href="/pedidos" className="text-sm text-green-700 hover:underline">Ver todos →</Link>
+            <Link href="/pedidos" className="text-sm text-green-700 hover:underline print:hidden">Ver todos →</Link>
           </div>
           {recentOrders.length > 0 ? (
             <div className="space-y-2">
               {(recentOrders as any[]).map((o: any) => (
                 <div key={o.id} className="flex justify-between items-center text-sm py-1.5 border-b border-gray-50 last:border-0">
                   <div>
-                    <span className="text-gray-700">{formatDateBR(o.order_date)}</span>
+                    <span className="text-gray-700">{formatDateBR(typeof o.order_date === 'string' ? o.order_date.substring(0,10) : o.order_date instanceof Date ? o.order_date.toISOString().substring(0,10) : '')}</span>
                     {o.description && <span className="text-gray-400 ml-2 text-xs">{o.description}</span>}
-                    <span className="ml-2 text-xs text-gray-400">vence {formatDateBR(o.due_date)}</span>
+                    <span className="ml-2 text-xs text-gray-400">vence {formatDateBR(typeof o.due_date === 'string' ? o.due_date.substring(0,10) : o.due_date instanceof Date ? o.due_date.toISOString().substring(0,10) : '')}</span>
                   </div>
                   <span className="font-semibold text-gray-900">{formatCurrency(Number(o.total_amount))}</span>
                 </div>
@@ -110,13 +116,13 @@ export default async function DashboardPage() {
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-800">Últimos Pagamentos</h2>
-            <Link href="/pagamentos" className="text-sm text-green-700 hover:underline">Ver todos →</Link>
+            <Link href="/pagamentos" className="text-sm text-green-700 hover:underline print:hidden">Ver todos →</Link>
           </div>
           {recentPayments.length > 0 ? (
             <div className="space-y-2">
               {(recentPayments as any[]).map((p: any) => (
                 <div key={p.id} className="flex justify-between items-center text-sm py-1.5 border-b border-gray-50 last:border-0">
-                  <span className="text-gray-700">{formatDateBR(p.payment_date)}</span>
+                  <span className="text-gray-700">{formatDateBR(typeof p.payment_date === 'string' ? p.payment_date.substring(0,10) : p.payment_date instanceof Date ? p.payment_date.toISOString().substring(0,10) : '')}</span>
                   <span className="font-semibold text-green-700">{formatCurrency(Number(p.amount))}</span>
                 </div>
               ))}
@@ -125,6 +131,11 @@ export default async function DashboardPage() {
             <p className="text-sm text-gray-400">Nenhum pagamento ainda.</p>
           )}
         </div>
+      </div>
+
+      {/* Rodapé de impressão */}
+      <div className="hidden print:block text-xs text-gray-400 text-right border-t pt-2">
+        Emitido em {new Date().toLocaleString('pt-BR')}
       </div>
     </div>
   )
