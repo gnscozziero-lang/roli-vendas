@@ -164,7 +164,7 @@ export default function EditOrderModal({ order, items, onClose }: Props) {
                         <input type="number" min="0" step="0.5" value={qty}
                           onChange={e => setQty(item.id, e.target.value)}
                           placeholder="0"
-                          className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm text-right focus:border-green-600 focus:ring-1 focus:ring-green-600 focus:outline-none"
+                          className="w-28 rounded-md border border-gray-300 px-2 py-1 text-sm text-right focus:border-green-600 focus:ring-1 focus:ring-green-600 focus:outline-none"
                         />
                       </div>
                     )
@@ -192,7 +192,7 @@ export default function EditOrderModal({ order, items, onClose }: Props) {
                           <input type="number" min="0" step="1" value={qty}
                             onChange={e => setQty(item.id, e.target.value)}
                             placeholder="0"
-                            className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm text-right focus:border-green-600 focus:ring-1 focus:ring-green-600 focus:outline-none"
+                            className="w-28 rounded-md border border-gray-300 px-2 py-1 text-sm text-right focus:border-green-600 focus:ring-1 focus:ring-green-600 focus:outline-none"
                           />
                         </div>
                       )

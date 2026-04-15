@@ -102,7 +102,7 @@ export default async function DashboardPage() {
                   <div>
                     <span className="text-gray-700">{formatDateBR(typeof o.order_date === 'string' ? o.order_date.substring(0,10) : o.order_date instanceof Date ? o.order_date.toISOString().substring(0,10) : '')}</span>
                     {o.description && <span className="text-gray-400 ml-2 text-xs">{o.description}</span>}
-                    <span className="ml-2 text-xs text-gray-400">vence {formatDateBR(typeof o.due_date === 'string' ? o.due_date.substring(0,10) : o.due_date instanceof Date ? o.due_date.toISOString().substring(0,10) : '')}</span>
+                    <span className="ml-2 text-xs text-gray-400">{(() => { const d = typeof o.due_date === 'string' ? o.due_date.substring(0,10) : o.due_date instanceof Date ? o.due_date.toISOString().substring(0,10) : ''; const isPast = d < new Date().toISOString().substring(0,10); return (isPast ? 'venceu ' : 'vence ') + formatDateBR(d); })()}</span>
                   </div>
                   <span className="font-semibold text-gray-900">{formatCurrency(Number(o.total_amount))}</span>
                 </div>

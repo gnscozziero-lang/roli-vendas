@@ -121,24 +121,29 @@ function buildHTMLPedidos(orders: any[], dateFrom: string, dateTo: string): stri
 
 // ── Relatório 2: Extrato por Vencimento (sintético) ───────────────────────
 
-function buildHTMLExtrato(due_date: string, prevDue: string, orders: any[], payments: any[], saldoAnterior: number): string {
+function buildHTMLExtrato(due_date: string, prevDue: string, orders: any[], payments: any[], saldoAtrasado: number, saldoAVencer: number, today: string): string {
   const totalPedidos    = orders.reduce((s: number, o: any) => s + Number(o.total_amount), 0)
   const totalPagamentos = payments.reduce((s: number, p: any) => s + Number(p.amount), 0)
-  const totalDevedor    = saldoAnterior + totalPedidos
+  const isDueInFuture   = due_date > today
+  const totalDevedor    = saldoAtrasado + saldoAVencer + totalPedidos
   const saldo           = Math.max(0, totalDevedor - totalPagamentos)
 
-  const saldoAnteriorRow = saldoAnterior > 0 ? `
-    <tr class="section-title"><td colspan="4">SALDO ANTERIOR EM ABERTO</td></tr>
+  const saldoAtrasadoRow = saldoAtrasado > 0 ? `
+    <tr class="section-title"><td colspan="4">SALDO EM ATRASO (ciclos vencidos antes de ${fmtDate(today)})</td></tr>
     <tr>
       <td>—</td>
-      <td>Saldo de ciclos anteriores</td>
-      <td class="right" style="color:#dc2626;font-weight:bold">${fmtCur(saldoAnterior)}</td>
+      <td>Saldo de ciclos vencidos em aberto</td>
+      <td class="right" style="color:#dc2626;font-weight:bold">${fmtCur(saldoAtrasado)}</td>
       <td class="right">—</td>
-    </tr>
-    <tr class="total-row">
-      <td colspan="2">Total Devedor do Ciclo (saldo ant. + pedidos)</td>
-      <td class="right">${fmtCur(totalDevedor)}</td>
-      <td></td>
+    </tr>` : ''
+
+  const saldoAVencerRow = saldoAVencer > 0 ? `
+    <tr class="section-title"><td colspan="4">SALDO A VENCER (ciclos futuros em aberto)</td></tr>
+    <tr>
+      <td>—</td>
+      <td>Saldo de ciclos ainda não vencidos</td>
+      <td class="right" style="color:#d97706;font-weight:bold">${fmtCur(saldoAVencer)}</td>
+      <td class="right">—</td>
     </tr>` : ''
 
   const orderRows = orders.map((o: any) => `
@@ -157,14 +162,17 @@ function buildHTMLExtrato(due_date: string, prevDue: string, orders: any[], paym
       <td class="right">${fmtCur(p.amount)}</td>
     </tr>`).join('')
 
-  const periodoLabel = prevDue && prevDue !== '2000-01-01'
-    ? `Pagamentos referentes ao vencimento de ${formatDateBR(due_date)}`
-    : `Pagamentos até ${formatDateBR(due_date)}`
+  const totalDevedorRow = (saldoAtrasado > 0 || saldoAVencer > 0) ? `
+    <tr class="total-row">
+      <td colspan="2">TOTAL DEVEDOR (atraso + a vencer + ciclo atual)</td>
+      <td class="right">${fmtCur(totalDevedor)}</td>
+      <td></td>
+    </tr>` : ''
 
   return `
     <header>
       <h1>Extrato por Vencimento</h1>
-      <p>Vencimento: ${formatDateBR(due_date)}</p>
+      <p>Vencimento: ${formatDateBR(due_date)} — Emitido com base em: ${fmtDate(today)}</p>
     </header>
     <table>
       <thead>
@@ -176,15 +184,17 @@ function buildHTMLExtrato(due_date: string, prevDue: string, orders: any[], paym
         </tr>
       </thead>
       <tbody>
-        ${saldoAnteriorRow}
-        <tr class="section-title"><td colspan="4">PEDIDOS DO CICLO</td></tr>
+        ${saldoAtrasadoRow}
+        ${saldoAVencerRow}
+        <tr class="section-title"><td colspan="4">PEDIDOS DO CICLO — vencimento ${formatDateBR(due_date)}</td></tr>
         ${orderRows || '<tr><td colspan="4" style="color:#999;padding:6px 8px">Nenhum pedido neste ciclo.</td></tr>'}
         <tr class="total-row">
           <td colspan="2">Subtotal Pedidos do Ciclo</td>
           <td class="right">${fmtCur(totalPedidos)}</td>
           <td></td>
         </tr>
-        <tr class="section-title"><td colspan="4">PAGAMENTOS RECEBIDOS — ${periodoLabel}</td></tr>
+        ${totalDevedorRow}
+        <tr class="section-title"><td colspan="4">PAGAMENTOS RECEBIDOS — referentes ao vencimento ${formatDateBR(due_date)}</td></tr>
         ${paymentRows || '<tr><td colspan="4" style="color:#999;padding:6px 8px">Nenhum pagamento registrado.</td></tr>'}
         <tr class="total-row">
           <td colspan="3">Subtotal Pagamentos</td>
@@ -239,7 +249,7 @@ export default function RelatoriosClient({ ciclos }: Props) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Erro ao buscar dados.')
       emitirPDF(
-        buildHTMLExtrato(selectedCiclo, data.prevDue, data.orders, data.payments, data.saldoAnterior ?? 0),
+        buildHTMLExtrato(selectedCiclo, data.prevDue, data.orders, data.payments, data.saldoAtrasado ?? 0, data.saldoAVencer ?? 0, data.today ?? new Date().toISOString().substring(0,10)),
         `Extrato Vencimento ${formatDateBR(selectedCiclo)}`
       )
     } catch (e: any) {
