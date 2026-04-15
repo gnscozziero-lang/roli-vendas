@@ -126,9 +126,9 @@ export async function deleteOrder(id: string) {
 
 // ── Payments ───────────────────────────────────────────────────────────────
 
-export async function createPayment(payment_date: string, amount: number, notes: string) {
+export async function createPayment(payment_date: string, amount: number, notes: string, due_date_ref: string) {
   if (amount <= 0) throw new Error('Valor inválido')
-  await sql`INSERT INTO payments (payment_date, amount, notes) VALUES (${payment_date}, ${amount}, ${notes})`
+  await sql`INSERT INTO payments (payment_date, amount, notes, due_date_ref) VALUES (${payment_date}, ${amount}, ${notes}, ${due_date_ref})`
   revalidatePath('/')
   revalidatePath('/pagamentos')
 }
@@ -175,4 +175,21 @@ export async function runImport(seedJson: string) {
   revalidatePath('/pedidos')
   revalidatePath('/pagamentos')
   return { items: seed.items.length, orders: seed.orders.length, payments: seed.payments.length }
+}
+
+export async function updatePayment(
+  id: string,
+  payment_date: string,
+  amount: number,
+  notes: string,
+  due_date_ref: string
+) {
+  if (amount <= 0) throw new Error('Valor inválido')
+  await sql`
+    UPDATE payments
+    SET payment_date = ${payment_date}, amount = ${amount}, notes = ${notes}, due_date_ref = ${due_date_ref}
+    WHERE id = ${id}
+  `
+  revalidatePath('/')
+  revalidatePath('/pagamentos')
 }

@@ -10,31 +10,29 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Busca o vencimento anterior (o maior due_date menor que o atual)
+    // Vencimento anterior para label do relatório
     const prevResult = await sql`
-      SELECT MAX(due_date) as prev_due
-      FROM orders
-      WHERE due_date < ${due_date}
+      SELECT MAX(due_date) as prev_due FROM orders WHERE due_date < ${due_date}
     `
     const prevDue = (prevResult as any[])[0]?.prev_due
     const prevDueStr = prevDue
       ? (typeof prevDue === 'string' ? prevDue.substring(0, 10) : prevDue.toISOString().substring(0, 10))
       : '2000-01-01'
 
-    // Pedidos do ciclo (com esse due_date)
+    // Pedidos do ciclo
     const orders = await sql`
       SELECT id, order_date, due_date, total_amount, description
-      FROM orders
-      WHERE due_date = ${due_date}
+      FROM orders WHERE due_date = ${due_date}
       ORDER BY order_date ASC
     `
 
-    // Pagamentos entre o vencimento anterior (exclusive) e este vencimento (inclusive)
+    // Pagamentos referentes a este vencimento (usando due_date_ref)
+    // Fallback: se due_date_ref for nulo, usa a lógica antiga de período
     const payments = await sql`
-      SELECT id, payment_date, amount, notes
+      SELECT id, payment_date, amount, notes, due_date_ref
       FROM payments
-      WHERE payment_date > ${prevDueStr}
-        AND payment_date <= ${due_date}
+      WHERE due_date_ref = ${due_date}
+         OR (due_date_ref IS NULL AND payment_date > ${prevDueStr} AND payment_date <= ${due_date})
       ORDER BY payment_date ASC
     `
 
