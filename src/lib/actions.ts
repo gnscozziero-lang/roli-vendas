@@ -222,3 +222,6 @@ export async function importData(data: {
 // ─── ALIASES — compatibilidade com código existente ──────────────────────────
 export const addItem = createItem;
 export const updateItem = updateItemPrice;
+
+// alias para ImportForm.tsx
+export const runImport = importData;
