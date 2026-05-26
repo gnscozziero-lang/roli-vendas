@@ -69,7 +69,7 @@ export default function PedidosTable({ orders, items, clients }: Props) {
                     >
                       Editar
                     </button>
-                    <DeleteButton id={order.id} />
+                    <DeleteButton id={order.id} type="order" />
                   </div>
                 </td>
               </tr>
