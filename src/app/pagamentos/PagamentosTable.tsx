@@ -1,91 +1,76 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { Payment, Client } from '@/types';
-import { formatCurrency, formatDateBR } from '@/lib/billing';
-import EditPaymentModal from './EditPaymentModal';
-import DeletePgtoButton from './DeletePgtoButton';
+import { useState } from 'react'
+import { Payment, Client } from '@/types'
+import { formatCurrency, formatDateBR } from '@/lib/billing'
+import EditPaymentModal from './EditPaymentModal'
+import DeletePgtoButton from './DeletePgtoButton'
 
-interface Props {
-  payments: Payment[];
-  clients: Client[];
-}
+export default function PagamentosTable({ payments, clients }: { payments: Payment[]; clients: Client[] }) {
+  const [filterClient, setFilterClient] = useState('')
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
 
-export default function PagamentosTable({ payments, clients }: Props) {
-  const [filterClient, setFilterClient] = useState('');
-  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
-
-  const filtered = filterClient
-    ? payments.filter(p => p.client === filterClient)
-    : payments;
+  const filtered = filterClient ? payments.filter(p => p.client === filterClient) : payments
 
   return (
-    <div>
-      <div className="flex items-center gap-4 mb-4">
-        <h2 className="text-lg font-semibold">Pagamentos lançados</h2>
-        <select
-          value={filterClient}
-          onChange={e => setFilterClient(e.target.value)}
-          className="border rounded px-3 py-1 text-sm"
-        >
-          <option value="">Todos os clientes</option>
-          {clients.map(c => (
-            <option key={c.id} value={c.name}>{c.name}</option>
-          ))}
+    <>
+      {/* Client filter — NEW */}
+      <div className="px-6 py-3 border-b border-gray-100 flex items-center gap-3 bg-gray-50">
+        <label className="text-sm font-medium text-gray-700">Filtrar por cliente:</label>
+        <select value={filterClient} onChange={e => setFilterClient(e.target.value)} className="input w-48">
+          <option value="">Todos</option>
+          {clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
         </select>
       </div>
 
-      <div className="border rounded overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="text-left px-3 py-2">Data</th>
-              <th className="text-left px-3 py-2">Cliente</th>
-              <th className="text-left px-3 py-2">Venc. Ref.</th>
-              <th className="text-left px-3 py-2">Obs</th>
-              <th className="text-right px-3 py-2">Valor</th>
-              <th className="px-3 py-2 w-24"></th>
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50">
+          <tr className="text-left text-gray-500">
+            <th className="px-6 py-3 font-medium">Data</th>
+            <th className="px-6 py-3 font-medium">Cliente</th>
+            <th className="px-6 py-3 font-medium">Observação</th>
+            <th className="px-6 py-3 font-medium">Referente ao venc.</th>
+            <th className="px-6 py-3 font-medium text-right">Valor</th>
+            <th className="px-6 py-3 font-medium text-center">Origem</th>
+            <th className="px-6 py-3 font-medium text-right">Ações</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {filtered.length === 0 && (
+            <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-400">Nenhum pagamento encontrado</td></tr>
+          )}
+          {filtered.map(payment => (
+            <tr key={payment.id} className="hover:bg-gray-50 transition-colors">
+              <td className="px-6 py-3 whitespace-nowrap">{formatDateBR(payment.payment_date)}</td>
+              <td className="px-6 py-3 font-medium text-gray-800">{payment.client}</td>
+              <td className="px-6 py-3 text-gray-600">{payment.notes || '—'}</td>
+              <td className="px-6 py-3">
+                {payment.due_date_ref
+                  ? <span className="font-semibold text-green-700">{formatDateBR(payment.due_date_ref)}</span>
+                  : <span className="text-gray-400 italic text-xs">não definido</span>
+                }
+              </td>
+              <td className="px-6 py-3 text-right font-semibold text-green-700">{formatCurrency(Number(payment.amount))}</td>
+              <td className="px-6 py-3 text-center">
+                {payment.imported
+                  ? <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">importado</span>
+                  : <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">manual</span>
+                }
+              </td>
+              <td className="px-6 py-3 text-right">
+                <div className="flex items-center justify-end gap-3">
+                  <button onClick={() => setEditingPayment(payment)} className="text-xs text-blue-600 hover:text-blue-800 transition-colors">editar</button>
+                  {!payment.imported && <DeletePgtoButton id={payment.id} />}
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-center py-8 text-gray-400">Nenhum pagamento encontrado</td>
-              </tr>
-            )}
-            {filtered.map(payment => (
-              <tr key={payment.id} className="border-t hover:bg-gray-50">
-                <td className="px-3 py-2 whitespace-nowrap">{formatDateBR(payment.payment_date)}</td>
-                <td className="px-3 py-2 font-medium">{payment.client}</td>
-                <td className="px-3 py-2 whitespace-nowrap text-gray-500">
-                  {payment.due_date_ref ? formatDateBR(payment.due_date_ref) : '—'}
-                </td>
-                <td className="px-3 py-2 text-gray-600">{payment.notes || '—'}</td>
-                <td className="px-3 py-2 text-right font-medium text-green-700">{formatCurrency(Number(payment.amount))}</td>
-                <td className="px-3 py-2">
-                  <div className="flex gap-1 justify-end">
-                    <button
-                      onClick={() => setEditingPayment(payment)}
-                      className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded hover:bg-yellow-200"
-                    >
-                      Editar
-                    </button>
-                    <DeletePgtoButton id={payment.id} />
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
 
       {editingPayment && (
-        <EditPaymentModal
-          payment={editingPayment}
-          clients={clients}
-          onClose={() => setEditingPayment(null)}
-        />
+        <EditPaymentModal payment={editingPayment} clients={clients} onClose={() => setEditingPayment(null)} />
       )}
-    </div>
-  );
+    </>
+  )
 }

@@ -1,37 +1,41 @@
-import { sql } from '@/lib/db';
-import { formatDateISO } from '@/lib/billing';
-import NovoPedidoForm from './NovoPedidoForm';
-import PedidosTable from './PedidosTable';
-import { getActiveClients } from '@/lib/actions';
+import { sql } from '@/lib/db'
+import { formatDateISO } from '@/lib/billing'
+import NovoPedidoForm from './NovoPedidoForm'
+import PedidosTable from './PedidosTable'
+import { getActiveClients } from '@/lib/actions'
 
 function toISO(val: any): string {
-  if (!val) return '';
-  if (val instanceof Date) return formatDateISO(val);
-  return String(val).substring(0, 10);
+  if (!val) return ''
+  if (val instanceof Date) return formatDateISO(val)
+  return String(val).substring(0, 10)
 }
 
 export default async function PedidosPage() {
-  const itemRows = await sql`SELECT * FROM items WHERE active = true ORDER BY name ASC` as any[];
-  const items = itemRows.map((r: any) => ({
-    ...r,
-    unit_price: Number(r.unit_price),
-  }));
+  const itemRows = await sql`SELECT * FROM items WHERE active = true ORDER BY name ASC` as any[]
+  const items = itemRows.map((r: any) => ({ ...r, unit_price: Number(r.unit_price) }))
 
-  const orderRows = await sql`SELECT * FROM orders ORDER BY order_date DESC, id DESC` as any[];
+  const orderRows = await sql`SELECT * FROM orders ORDER BY order_date DESC, id DESC` as any[]
   const orders = orderRows.map((r: any) => ({
     ...r,
     order_date: toISO(r.order_date),
     due_date: toISO(r.due_date),
     total_amount: Number(r.total_amount),
-  }));
+  }))
 
-  const clients = await getActiveClients() as any[];
+  const clients = await getActiveClients() as any[]
 
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4 space-y-8">
-      <h1 className="text-2xl font-bold">Pedidos</h1>
-      <NovoPedidoForm items={items} clients={clients} />
-      <PedidosTable orders={orders} items={items} clients={clients} />
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Pedidos</h1>
+        <p className="text-sm text-gray-500 mt-1">Registre e gerencie pedidos por cliente</p>
+      </div>
+      <div className="card p-6">
+        <NovoPedidoForm items={items} clients={clients} />
+      </div>
+      <div className="card overflow-hidden">
+        <PedidosTable orders={orders} items={items} clients={clients} />
+      </div>
     </div>
-  );
+  )
 }

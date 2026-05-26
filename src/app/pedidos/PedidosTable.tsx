@@ -1,91 +1,73 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { Order, Item, Client } from '@/types';
-import { formatCurrency, formatDateBR } from '@/lib/billing';
-import EditOrderModal from './EditOrderModal';
-import DeleteButton from './DeleteButton';
+import { useState } from 'react'
+import { Order, Item, Client } from '@/types'
+import { formatCurrency, formatDateBR } from '@/lib/billing'
+import EditOrderModal from './EditOrderModal'
+import DeleteButton from './DeleteButton'
 
-interface Props {
-  orders: Order[];
-  items: Item[];
-  clients: Client[];
-}
+export default function PedidosTable({ orders, items, clients }: { orders: Order[]; items: Item[]; clients: Client[] }) {
+  const [filterClient, setFilterClient] = useState('')
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null)
 
-export default function PedidosTable({ orders, items, clients }: Props) {
-  const [filterClient, setFilterClient] = useState('');
-  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
-
-  const filtered = filterClient
-    ? orders.filter(o => o.client === filterClient)
-    : orders;
+  const filtered = filterClient ? orders.filter(o => o.client === filterClient) : orders
 
   return (
-    <div>
-      <div className="flex items-center gap-4 mb-4">
-        <h2 className="text-lg font-semibold">Pedidos lançados</h2>
-        <select
-          value={filterClient}
-          onChange={e => setFilterClient(e.target.value)}
-          className="border rounded px-3 py-1 text-sm"
-        >
-          <option value="">Todos os clientes</option>
-          {clients.map(c => (
-            <option key={c.id} value={c.name}>{c.name}</option>
-          ))}
+    <>
+      {/* Client filter — NEW */}
+      <div className="px-6 py-3 border-b border-gray-100 flex items-center gap-3 bg-gray-50">
+        <label className="text-sm font-medium text-gray-700">Filtrar por cliente:</label>
+        <select value={filterClient} onChange={e => setFilterClient(e.target.value)} className="input w-48">
+          <option value="">Todos</option>
+          {clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
         </select>
       </div>
 
-      <div className="border rounded overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="text-left px-3 py-2">Data</th>
-              <th className="text-left px-3 py-2">Cliente</th>
-              <th className="text-left px-3 py-2">Vencimento</th>
-              <th className="text-left px-3 py-2">Descrição</th>
-              <th className="text-right px-3 py-2">Total</th>
-              <th className="px-3 py-2 w-24"></th>
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50">
+          <tr className="text-left text-gray-500">
+            <th className="px-6 py-3 font-medium">Data</th>
+            <th className="px-6 py-3 font-medium">Cliente</th>
+            <th className="px-6 py-3 font-medium">Descrição</th>
+            <th className="px-6 py-3 font-medium">Vencimento</th>
+            <th className="px-6 py-3 font-medium text-right">Valor</th>
+            <th className="px-6 py-3 font-medium text-center">Origem</th>
+            <th className="px-6 py-3 font-medium text-right">Ações</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {filtered.length === 0 && (
+            <tr><td colSpan={7} className="px-6 py-8 text-center text-gray-400">Nenhum pedido encontrado</td></tr>
+          )}
+          {filtered.map(order => (
+            <tr key={order.id} className="hover:bg-gray-50 transition-colors">
+              <td className="px-6 py-3 whitespace-nowrap">{formatDateBR(order.order_date)}</td>
+              <td className="px-6 py-3 font-medium text-gray-800">{order.client}</td>
+              <td className="px-6 py-3 text-gray-600 max-w-[180px] truncate">{order.description || '—'}</td>
+              <td className="px-6 py-3 whitespace-nowrap">{formatDateBR(order.due_date)}</td>
+              <td className="px-6 py-3 text-right font-semibold">{formatCurrency(Number(order.total_amount))}</td>
+              <td className="px-6 py-3 text-center">
+                {order.imported
+                  ? <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">importado</span>
+                  : <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">manual</span>
+                }
+              </td>
+              <td className="px-6 py-3 text-right">
+                <div className="flex items-center justify-end gap-3">
+                  <button onClick={() => setEditingOrder(order)} className="text-xs text-blue-600 hover:text-blue-800 transition-colors">
+                    editar
+                  </button>
+                  {!order.imported && <DeleteButton id={order.id} type="order" />}
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={6} className="text-center py-8 text-gray-400">Nenhum pedido encontrado</td>
-              </tr>
-            )}
-            {filtered.map(order => (
-              <tr key={order.id} className="border-t hover:bg-gray-50">
-                <td className="px-3 py-2 whitespace-nowrap">{formatDateBR(order.order_date)}</td>
-                <td className="px-3 py-2 font-medium">{order.client}</td>
-                <td className="px-3 py-2 whitespace-nowrap">{formatDateBR(order.due_date)}</td>
-                <td className="px-3 py-2 text-gray-600">{order.description || '—'}</td>
-                <td className="px-3 py-2 text-right font-medium">{formatCurrency(Number(order.total_amount))}</td>
-                <td className="px-3 py-2">
-                  <div className="flex gap-1 justify-end">
-                    <button
-                      onClick={() => setEditingOrder(order)}
-                      className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded hover:bg-yellow-200"
-                    >
-                      Editar
-                    </button>
-                    <DeleteButton id={order.id} type="order" />
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
 
       {editingOrder && (
-        <EditOrderModal
-          order={editingOrder}
-          items={items}
-          clients={clients}
-          onClose={() => setEditingOrder(null)}
-        />
+        <EditOrderModal order={editingOrder} items={items} clients={clients} onClose={() => setEditingOrder(null)} />
       )}
-    </div>
-  );
+    </>
+  )
 }
