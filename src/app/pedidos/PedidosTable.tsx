@@ -1,108 +1,91 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { formatCurrency, formatDateBR } from '@/lib/billing'
-import DeleteButton from './DeleteButton'
-import EditOrderModal from './EditOrderModal'
+import { useState } from 'react';
+import { Order, Item, Client } from '@/types';
+import { formatCurrency, formatDateBR } from '@/lib/billing';
+import EditOrderModal from './EditOrderModal';
+import DeleteButton from './DeleteButton';
 
-interface Item { id: string; name: string; unit_price: number; active: boolean }
-interface Order {
-  id: string; order_date: string; due_date: string
-  total_amount: number; description: string; imported: boolean
-}
-interface Props { orders: Order[]; items: Item[] }
-
-function toISO(v: unknown) {
-  if (!v) return ''
-  if (v instanceof Date) return v.toISOString().substring(0, 10)
-  return String(v).substring(0, 10)
+interface Props {
+  orders: Order[];
+  items: Item[];
+  clients: Client[];
 }
 
-export default function PedidosTable({ orders, items }: Props) {
-  const [editingOrder, setEditingOrder] = useState<any | null>(null)
-  const [loadingId, setLoadingId] = useState<string | null>(null)
+export default function PedidosTable({ orders, items, clients }: Props) {
+  const [filterClient, setFilterClient] = useState('');
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
 
-  const openEdit = async (order: Order) => {
-    setLoadingId(order.id)
-    try {
-      const res = await fetch(`/api/orders?id=${order.id}`)
-      const data = await res.json()
-      setEditingOrder({
-        ...order,
-        order_date: toISO(order.order_date),
-        due_date:   toISO(order.due_date),
-        order_items: data.items ?? [],
-      })
-    } catch {
-      setEditingOrder({
-        ...order,
-        order_date: toISO(order.order_date),
-        due_date:   toISO(order.due_date),
-        order_items: [],
-      })
-    } finally {
-      setLoadingId(null)
-    }
-  }
+  const filtered = filterClient
+    ? orders.filter(o => o.client === filterClient)
+    : orders;
 
   return (
-    <>
-      {editingOrder && (
-        <EditOrderModal
-          order={editingOrder}
-          items={items}
-          onClose={() => setEditingOrder(null)}
-        />
-      )}
+    <div>
+      <div className="flex items-center gap-4 mb-4">
+        <h2 className="text-lg font-semibold">Pedidos lançados</h2>
+        <select
+          value={filterClient}
+          onChange={e => setFilterClient(e.target.value)}
+          className="border rounded px-3 py-1 text-sm"
+        >
+          <option value="">Todos os clientes</option>
+          {clients.map(c => (
+            <option key={c.id} value={c.name}>{c.name}</option>
+          ))}
+        </select>
+      </div>
 
-      <div className="overflow-x-auto">
+      <div className="border rounded overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr className="text-left text-gray-500">
-              <th className="px-6 py-3 font-medium">Data</th>
-              <th className="px-6 py-3 font-medium">Descrição</th>
-              <th className="px-6 py-3 font-medium">Vencimento</th>
-              <th className="px-6 py-3 font-medium text-right">Valor</th>
-              <th className="px-6 py-3 font-medium text-center">Origem</th>
-              <th className="px-6 py-3 font-medium"></th>
+          <thead className="bg-gray-100">
+            <tr>
+              <th className="text-left px-3 py-2">Data</th>
+              <th className="text-left px-3 py-2">Cliente</th>
+              <th className="text-left px-3 py-2">Vencimento</th>
+              <th className="text-left px-3 py-2">Descrição</th>
+              <th className="text-right px-3 py-2">Total</th>
+              <th className="px-3 py-2 w-24"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
-            {orders.map(o => (
-              <tr key={o.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-6 py-3 text-gray-700 whitespace-nowrap">{formatDateBR(toISO(o.order_date))}</td>
-                <td className="px-6 py-3 text-gray-600 max-w-xs truncate">{o.description || '—'}</td>
-                <td className="px-6 py-3 text-gray-700 whitespace-nowrap">{formatDateBR(toISO(o.due_date))}</td>
-                <td className="px-6 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">
-                  {formatCurrency(Number(o.total_amount))}
-                </td>
-                <td className="px-6 py-3 text-center">
-                  {o.imported
-                    ? <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">importado</span>
-                    : <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium">manual</span>}
-                </td>
-                <td className="px-6 py-3 text-right">
-                  <div className="flex items-center justify-end gap-3">
+          <tbody>
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={6} className="text-center py-8 text-gray-400">Nenhum pedido encontrado</td>
+              </tr>
+            )}
+            {filtered.map(order => (
+              <tr key={order.id} className="border-t hover:bg-gray-50">
+                <td className="px-3 py-2 whitespace-nowrap">{formatDateBR(order.order_date)}</td>
+                <td className="px-3 py-2 font-medium">{order.client}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{formatDateBR(order.due_date)}</td>
+                <td className="px-3 py-2 text-gray-600">{order.description || '—'}</td>
+                <td className="px-3 py-2 text-right font-medium">{formatCurrency(order.total_amount)}</td>
+                <td className="px-3 py-2">
+                  <div className="flex gap-1 justify-end">
                     <button
-                      onClick={() => openEdit(o)}
-                      disabled={loadingId === o.id}
-                      className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-40 transition-colors"
+                      onClick={() => setEditingOrder(order)}
+                      className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded hover:bg-yellow-200"
                     >
-                      {loadingId === o.id ? '…' : 'editar'}
+                      Editar
                     </button>
-                    <DeleteButton id={o.id} type="order" />
+                    <DeleteButton id={order.id} />
                   </div>
                 </td>
               </tr>
             ))}
-            {!orders.length && (
-              <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-400">Nenhum pedido registrado.</td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
-    </>
-  )
+
+      {editingOrder && (
+        <EditOrderModal
+          order={editingOrder}
+          items={items}
+          clients={clients}
+          onClose={() => setEditingOrder(null)}
+        />
+      )}
+    </div>
+  );
 }
