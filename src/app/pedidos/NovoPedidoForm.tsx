@@ -1,158 +1,193 @@
-'use client'
+'use client';
 
-import { useState, useMemo, useTransition } from 'react'
-import { createOrder } from '@/lib/actions'
-import { getDueDateFromString, formatCurrency, formatDateBR, todayISO } from '@/lib/billing'
+import { useState, useEffect, useCallback } from 'react';
+import { createOrder } from '@/lib/actions';
+import { Item, Client } from '@/types';
+import { getDueDate, toISO } from '@/lib/billing';
 
-interface Item { id: string; name: string; unit_price: number; active: boolean }
-interface Props { items: Item[] }
-
-// Componente definido FORA do pai para evitar re-montagem a cada render
+// ─── ItemQtyInput DEFINED OUTSIDE PARENT — prevents focus loss bug ────────────
 function ItemQtyInput({
-  item, qty, onChange
+  value,
+  onChange,
 }: {
-  item: Item
-  qty: string
-  onChange: (id: string, val: string) => void
+  value: number;
+  onChange: (v: number) => void;
 }) {
-  const sub = qty ? Math.round(parseInt(qty) * item.unit_price * 100) / 100 : 0
   return (
-    <div className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors ${qty ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-white'}`}>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
-        <p className="text-xs text-gray-400">
-          {formatCurrency(item.unit_price)}/un
-          {qty ? <span className="ml-2 text-green-700 font-semibold">= {formatCurrency(sub)}</span> : ''}
-        </p>
-      </div>
-      <input
-        type="number"
-        inputMode="numeric"
-        min="0"
-        max="99999"
-        step="1"
-        value={qty}
-        onChange={e => onChange(item.id, e.target.value)}
-        placeholder="0"
-        className="w-28 rounded-md border border-gray-300 px-2 py-1 text-sm text-right focus:border-green-600 focus:ring-1 focus:ring-green-600 focus:outline-none"
-      />
-    </div>
-  )
+    <input
+      type="number"
+      min={0}
+      step={0.01}
+      value={value === 0 ? '' : value}
+      onChange={e => onChange(parseFloat(e.target.value) || 0)}
+      className="border rounded px-2 py-1 w-24 text-right"
+      placeholder="0"
+    />
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface Props {
+  items: Item[];
+  clients: Client[];
 }
 
-export default function NovoPedidoForm({ items }: Props) {
-  const [orderDate, setOrderDate]     = useState(todayISO())
-  const [description, setDescription] = useState('')
-  const [quantities, setQuantities]   = useState<Record<string, string>>({})
-  const [error, setError]             = useState('')
-  const [success, setSuccess]         = useState('')
-  const [isPending, startTransition]  = useTransition()
+export default function NovoPedidoForm({ items, clients }: Props) {
+  const today = new Date().toISOString().split('T')[0];
 
-  const dueDate = useMemo(() => orderDate ? getDueDateFromString(orderDate) : '', [orderDate])
+  const [orderDate, setOrderDate] = useState(today);
+  const [dueDate, setDueDate] = useState('');
+  const [description, setDescription] = useState('');
+  const [client, setClient] = useState(clients[0]?.name ?? '');
+  const [quantities, setQuantities] = useState<Record<number, number>>({});
+  const [submitting, setSubmitting] = useState(false);
 
-  const regularItems  = items.filter(i => !['Pino', 'Bucha', 'Meio'].some(p => i.name.startsWith(p)))
-  const hardwareItems = items.filter(i => ['Pino', 'Bucha', 'Meio'].some(p => i.name.startsWith(p)))
+  // Recalculate suggested due_date whenever orderDate changes
+  useEffect(() => {
+    const suggested = toISO(getDueDate(new Date(orderDate + 'T12:00:00')));
+    setDueDate(suggested);
+  }, [orderDate]);
 
-  const lines = useMemo(() =>
-    items
-      .map(item => {
-        const qty = parseInt(quantities[item.id] ?? '') || 0
-        return qty > 0
-          ? { item_id: item.id, item_name: item.name, quantity: qty,
-              unit_price: item.unit_price,
-              total_price: Math.round(qty * item.unit_price * 100) / 100 }
-          : null
-      })
-      .filter(Boolean) as { item_id: string; item_name: string; quantity: number; unit_price: number; total_price: number }[]
-  , [items, quantities])
+  const setQty = useCallback((id: number, val: number) => {
+    setQuantities(prev => ({ ...prev, [id]: val }));
+  }, []);
 
-  const total = lines.reduce((s, l) => s + l.total_price, 0)
+  const regularItems = items.filter(i => i.active && !['pinos', 'buchas', 'hardware'].some(k => i.name.toLowerCase().includes(k)));
+  const hardwareItems = items.filter(i => i.active && ['pinos', 'buchas', 'hardware'].some(k => i.name.toLowerCase().includes(k)));
 
-  const setQty = (id: string, val: string) =>
-    setQuantities(prev => ({ ...prev, [id]: val }))
+  const selectedItems = items
+    .filter(i => (quantities[i.id] ?? 0) > 0)
+    .map(i => ({
+      item_id: i.id,
+      item_name: i.name,
+      quantity: quantities[i.id],
+      unit_price: i.unit_price,
+    }));
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setSuccess('')
-    if (!orderDate) { setError('Informe a data do pedido.'); return }
-    if (!lines.length) { setError('Adicione ao menos um item com quantidade.'); return }
+  const total = selectedItems.reduce((s, i) => s + i.quantity * i.unit_price, 0);
 
-    startTransition(async () => {
-      try {
-        await createOrder(orderDate, description, lines)
-        setQuantities({})
-        setDescription('')
-        setSuccess(`Pedido de ${formatCurrency(total)} registrado! Vencimento: ${formatDateBR(dueDate)}`)
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'Erro ao salvar pedido.')
-      }
-    })
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (selectedItems.length === 0) return alert('Selecione ao menos um item.');
+    if (!client) return alert('Selecione um cliente.');
+
+    setSubmitting(true);
+    const fd = new FormData();
+    fd.append('order_date', orderDate);
+    fd.append('due_date', dueDate);
+    fd.append('description', description);
+    fd.append('client', client);
+    fd.append('items', JSON.stringify(selectedItems));
+
+    await createOrder(fd);
+    setQuantities({});
+    setDescription('');
+    setSubmitting(false);
   }
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div>
-          <label className="label">Data do Pedido *</label>
-          <input type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)} className="input" required />
-          {dueDate && (
-            <p className="text-xs text-gray-500 mt-1">Vencimento: <strong>{formatDateBR(dueDate)}</strong></p>
-          )}
-        </div>
-        <div className="sm:col-span-2">
-          <label className="label">Descrição / Observação</label>
-          <input type="text" value={description} onChange={e => setDescription(e.target.value)}
-            placeholder="ex: pedido 13/04" className="input" />
-        </div>
-      </div>
-
-      <div>
-        <p className="text-sm font-medium text-gray-700 mb-3">Itens do Pedido</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {regularItems.map(item => (
-            <ItemQtyInput
-              key={item.id}
-              item={item}
-              qty={quantities[item.id] ?? ''}
-              onChange={setQty}
-            />
+  function renderItemGroup(group: Item[], label: string) {
+    if (group.length === 0) return null;
+    return (
+      <div className="mb-4">
+        <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{label}</p>
+        <div className="space-y-2">
+          {group.map(item => (
+            <div key={item.id} className="flex items-center gap-3">
+              <span className="flex-1 text-sm">{item.name}</span>
+              <span className="text-xs text-gray-400 w-20 text-right">
+                R$ {item.unit_price.toFixed(2)}
+              </span>
+              <ItemQtyInput
+                value={quantities[item.id] ?? 0}
+                onChange={v => setQty(item.id, v)}
+              />
+            </div>
           ))}
         </div>
       </div>
+    );
+  }
 
-      {hardwareItems.length > 0 && (
+  return (
+    <form onSubmit={handleSubmit} className="bg-white border rounded-lg p-6 space-y-4">
+      <h2 className="text-lg font-semibold">Novo Pedido</h2>
+
+      <div className="grid grid-cols-2 gap-4">
+        {/* Client */}
         <div>
-          <p className="text-sm font-medium text-gray-700 mb-3">Pinos, Buchas e Outros</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {hardwareItems.map(item => (
-              <ItemQtyInput
-                key={item.id}
-                item={item}
-                qty={quantities[item.id] ?? ''}
-                onChange={setQty}
-              />
+          <label className="block text-sm font-medium mb-1">Cliente *</label>
+          <select
+            value={client}
+            onChange={e => setClient(e.target.value)}
+            required
+            className="border rounded px-3 py-2 w-full"
+          >
+            <option value="">Selecione...</option>
+            {clients.map(c => (
+              <option key={c.id} value={c.name}>{c.name}</option>
             ))}
-          </div>
+          </select>
         </div>
-      )}
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-4 border-t border-gray-100">
+        {/* Order date */}
         <div>
-          <p className="text-sm text-gray-500">Total do pedido</p>
-          <p className="text-2xl font-bold text-gray-900">{formatCurrency(total)}</p>
-          {lines.length > 0 && (
-            <p className="text-xs text-gray-400 mt-0.5">{lines.length} {lines.length === 1 ? 'item' : 'itens'}</p>
-          )}
+          <label className="block text-sm font-medium mb-1">Data do Pedido</label>
+          <input
+            type="date"
+            value={orderDate}
+            onChange={e => setOrderDate(e.target.value)}
+            required
+            className="border rounded px-3 py-2 w-full"
+          />
         </div>
-        <div className="flex flex-col gap-2 items-end w-full sm:w-auto">
-          {error   && <p className="text-sm text-red-600 bg-red-50 px-3 py-1.5 rounded-lg">{error}</p>}
-          {success && <p className="text-sm text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">{success}</p>}
-          <button type="submit" disabled={isPending || lines.length === 0} className="btn-primary">
-            {isPending ? 'Salvando…' : 'Registrar Pedido'}
-          </button>
+
+        {/* Due date — pre-filled but editable */}
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Vencimento
+            <span className="ml-2 text-xs font-normal text-gray-400">(sugerido pelo ciclo — editável)</span>
+          </label>
+          <input
+            type="date"
+            value={dueDate}
+            onChange={e => setDueDate(e.target.value)}
+            required
+            className="border rounded px-3 py-2 w-full"
+          />
+        </div>
+
+        {/* Description */}
+        <div>
+          <label className="block text-sm font-medium mb-1">Descrição</label>
+          <input
+            type="text"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="Opcional"
+            className="border rounded px-3 py-2 w-full"
+          />
         </div>
       </div>
+
+      {/* Items */}
+      <div className="border rounded p-4">
+        {renderItemGroup(regularItems, 'Itens')}
+        {renderItemGroup(hardwareItems, 'Hardware / Pinos / Buchas')}
+      </div>
+
+      {/* Total + submit */}
+      <div className="flex items-center justify-between pt-2">
+        <span className="text-sm font-medium">
+          Total: <span className="text-blue-700 font-bold">R$ {total.toFixed(2)}</span>
+        </span>
+        <button
+          type="submit"
+          disabled={submitting || selectedItems.length === 0}
+          className="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+        >
+          {submitting ? 'Salvando...' : 'Salvar Pedido'}
+        </button>
+      </div>
     </form>
-  )
+  );
 }
