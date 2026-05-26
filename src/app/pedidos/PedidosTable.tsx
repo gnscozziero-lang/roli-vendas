@@ -60,7 +60,7 @@ export default function PedidosTable({ orders, items, clients }: Props) {
                 <td className="px-3 py-2 font-medium">{order.client}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{formatDateBR(order.due_date)}</td>
                 <td className="px-3 py-2 text-gray-600">{order.description || '—'}</td>
-                <td className="px-3 py-2 text-right font-medium">{formatCurrency(order.total_amount)}</td>
+                <td className="px-3 py-2 text-right font-medium">{formatCurrency(Number(order.total_amount))}</td>
                 <td className="px-3 py-2">
                   <div className="flex gap-1 justify-end">
                     <button

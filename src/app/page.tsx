@@ -18,11 +18,13 @@ export default async function DashboardPage() {
     ...r,
     order_date: toISO(r.order_date),
     due_date: toISO(r.due_date),
+    total_amount: Number(r.total_amount),
   }));
 
   const paymentRows = await sql`SELECT * FROM payments ORDER BY payment_date ASC, id ASC` as any[];
   const payments = paymentRows.map((r: any) => ({
     ...r,
+    amount: Number(r.amount),
     payment_date: toISO(r.payment_date),
     due_date_ref: r.due_date_ref ? toISO(r.due_date_ref) : null,
   }));

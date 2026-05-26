@@ -12,13 +12,17 @@ function toISO(val: any): string {
 
 export default async function PedidosPage() {
   const itemRows = await sql`SELECT * FROM items WHERE active = true ORDER BY name ASC` as any[];
-  const items = itemRows.map((r: any) => ({ ...r }));
+  const items = itemRows.map((r: any) => ({
+    ...r,
+    unit_price: Number(r.unit_price),
+  }));
 
   const orderRows = await sql`SELECT * FROM orders ORDER BY order_date DESC, id DESC` as any[];
   const orders = orderRows.map((r: any) => ({
     ...r,
     order_date: toISO(r.order_date),
     due_date: toISO(r.due_date),
+    total_amount: Number(r.total_amount),
   }));
 
   const clients = await getActiveClients() as any[];

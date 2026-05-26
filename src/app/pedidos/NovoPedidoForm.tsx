@@ -73,10 +73,10 @@ export default function NovoPedidoForm({ items, clients }: Props) {
       item_id: i.id,
       item_name: i.name,
       quantity: quantities[i.id],
-      unit_price: i.unit_price,
+      unit_price: Number(i.unit_price),
     }));
 
-  const total = selectedItems.reduce((s, i) => s + i.quantity * i.unit_price, 0);
+  const total = selectedItems.reduce((s, i) => s + i.quantity * Number(i.unit_price), 0);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -107,7 +107,7 @@ export default function NovoPedidoForm({ items, clients }: Props) {
             <div key={item.id} className="flex items-center gap-3">
               <span className="flex-1 text-sm">{item.name}</span>
               <span className="text-xs text-gray-400 w-20 text-right">
-                R$ {item.unit_price.toFixed(2)}
+                R$ {Number(item.unit_price).toFixed(2)}
               </span>
               <ItemQtyInput
                 value={quantities[item.id] ?? 0}

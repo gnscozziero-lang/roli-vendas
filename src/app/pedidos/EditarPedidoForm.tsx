@@ -57,7 +57,7 @@ export default function EditarPedidoForm({ order, existingItems, allItems, clien
         const qty = parseFloat(quantities[item.id] ?? '') || 0
         return qty > 0
           ? { item_id: item.id, item_name: item.name, quantity: qty,
-              unit_price: item.unit_price }
+              unit_price: Number(item.unit_price) }
           : null
       })
       .filter(Boolean) as { item_id: string; item_name: string; quantity: number; unit_price: number }[]
@@ -130,7 +130,7 @@ export default function EditarPedidoForm({ order, existingItems, allItems, clien
                     className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors ${qty ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-white'}`}>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
-                      <p className="text-xs text-gray-400">{formatCurrency(item.unit_price)}/un
+                      <p className="text-xs text-gray-400">{formatCurrency(Number(item.unit_price))}/un
                         {qty ? <span className="ml-2 text-green-700 font-semibold">= {formatCurrency(sub)}</span> : ''}
                       </p>
                     </div>

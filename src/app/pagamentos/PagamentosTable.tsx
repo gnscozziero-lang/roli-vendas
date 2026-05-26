@@ -61,7 +61,7 @@ export default function PagamentosTable({ payments, clients }: Props) {
                   {payment.due_date_ref ? formatDateBR(payment.due_date_ref) : '—'}
                 </td>
                 <td className="px-3 py-2 text-gray-600">{payment.notes || '—'}</td>
-                <td className="px-3 py-2 text-right font-medium text-green-700">{formatCurrency(payment.amount)}</td>
+                <td className="px-3 py-2 text-right font-medium text-green-700">{formatCurrency(Number(payment.amount))}</td>
                 <td className="px-3 py-2">
                   <div className="flex gap-1 justify-end">
                     <button

@@ -14,6 +14,7 @@ export default async function PagamentosPage() {
   const paymentRows = await sql`SELECT * FROM payments ORDER BY payment_date DESC, id DESC` as any[];
   const payments = paymentRows.map((r: any) => ({
     ...r,
+    amount: Number(r.amount),
     payment_date: toISO(r.payment_date),
     due_date_ref: r.due_date_ref ? toISO(r.due_date_ref) : null,
   }));
