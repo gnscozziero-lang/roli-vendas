@@ -29,13 +29,16 @@ export default async function DashboardPage() {
     due_date_ref: r.due_date_ref ? toISO(r.due_date_ref) : null,
   }));
 
+  const settingRows = await sql`SELECT value FROM settings WHERE key = 'initial_balance'` as any[];
+  const initialBalance = settingRows.length > 0 ? Number(settingRows[0].value) : 0;
+
   return (
     <div className="max-w-5xl mx-auto py-8 px-4">
       <div className="flex items-center justify-between mb-6 print:hidden">
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <PrintButton />
       </div>
-      <DashboardClient orders={orders} payments={payments} clients={clients} />
+      <DashboardClient orders={orders} payments={payments} clients={clients} initialBalance={initialBalance} />
     </div>
   );
 }

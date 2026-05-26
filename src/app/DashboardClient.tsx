@@ -8,9 +8,10 @@ interface Props {
   orders: Order[];
   payments: Payment[];
   clients: Client[];
+  initialBalance: number;
 }
 
-export default function DashboardClient({ orders, payments, clients }: Props) {
+export default function DashboardClient({ orders, payments, clients, initialBalance }: Props) {
   const [selectedClient, setSelectedClient] = useState('');
 
   const filteredOrders = selectedClient
@@ -21,8 +22,11 @@ export default function DashboardClient({ orders, payments, clients }: Props) {
     ? payments.filter(p => p.client === selectedClient)
     : payments;
 
+  // When filtering by client, don't apply the global initial balance
+  const balanceToUse = selectedClient ? 0 : initialBalance;
+
   const { cycles, total_open, overdue_amount, next_due_amount } =
-    calculateBalances(filteredOrders as any, filteredPayments as any, 0);
+    calculateBalances(filteredOrders as any, filteredPayments as any, balanceToUse);
 
   return (
     <div>
