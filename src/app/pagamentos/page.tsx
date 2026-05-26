@@ -1,13 +1,17 @@
 import { sql } from '@/lib/db';
-import { toISO } from '@/lib/billing';
+import { formatDateISO } from '@/lib/billing';
 import NovoPagamentoForm from './NovoPagamentoForm';
 import PagamentosTable from './PagamentosTable';
 import { getActiveClients } from '@/lib/actions';
 
+function toISO(val: any): string {
+  if (!val) return '';
+  if (val instanceof Date) return formatDateISO(val);
+  return String(val).substring(0, 10);
+}
+
 export default async function PagamentosPage() {
-  const paymentRows = await sql`
-    SELECT * FROM payments ORDER BY payment_date DESC, id DESC
-  ` as any[];
+  const paymentRows = await sql`SELECT * FROM payments ORDER BY payment_date DESC, id DESC` as any[];
   const payments = paymentRows.map((r: any) => ({
     ...r,
     payment_date: toISO(r.payment_date),
@@ -16,10 +20,7 @@ export default async function PagamentosPage() {
 
   const clients = await getActiveClients() as any[];
 
-  // Unique due_dates from orders for the reference dropdown
-  const dueDateRows = await sql`
-    SELECT DISTINCT due_date FROM orders ORDER BY due_date DESC
-  ` as any[];
+  const dueDateRows = await sql`SELECT DISTINCT due_date FROM orders ORDER BY due_date DESC` as any[];
   const dueDateOptions = dueDateRows.map((r: any) => toISO(r.due_date));
 
   return (

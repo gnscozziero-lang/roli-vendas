@@ -2,7 +2,14 @@
 
 import { sql } from './db';
 import { revalidatePath } from 'next/cache';
-import { getDueDate, toISO } from './billing';
+import { getDueDate, formatDateISO } from './billing';
+
+// Local helper — Neon returns Date objects; this normalizes to YYYY-MM-DD string
+function toISO(val: any): string {
+  if (!val) return '';
+  if (val instanceof Date) return formatDateISO(val);
+  return String(val).substring(0, 10);
+}
 
 // ─── CLIENTS ────────────────────────────────────────────────────────────────
 
@@ -63,7 +70,7 @@ export async function createOrder(formData: FormData) {
 
   let due_date = formData.get('due_date') as string;
   if (!due_date) {
-    due_date = toISO(getDueDate(new Date(order_date + 'T12:00:00')));
+    due_date = formatDateISO(getDueDate(new Date(order_date + 'T12:00:00')));
   }
 
   const itemsJson = formData.get('items') as string;
@@ -222,6 +229,4 @@ export async function importData(data: {
 // ─── ALIASES — compatibilidade com código existente ──────────────────────────
 export const addItem = createItem;
 export const updateItem = updateItemPrice;
-
-// alias para ImportForm.tsx
 export const runImport = importData;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { calculateBalances, formatCurrency, formatDateBR } from '@/lib/billing';
+import { formatCurrency, formatDateBR, calculateBalances } from '@/lib/billing';
 import { Order, Payment, Client } from '@/types';
 
 interface Props {
@@ -21,7 +21,8 @@ export default function DashboardClient({ orders, payments, clients }: Props) {
     ? payments.filter(p => p.client === selectedClient)
     : payments;
 
-  const { cycles, totalOpen, nextDue, overdue } = calculateBalances(filteredOrders, filteredPayments);
+  const { cycles, total_open, overdue_amount, next_due_amount } =
+    calculateBalances(filteredOrders as any, filteredPayments as any, 0);
 
   return (
     <div>
@@ -46,15 +47,15 @@ export default function DashboardClient({ orders, payments, clients }: Props) {
       <div className="grid grid-cols-3 gap-4 mb-8">
         <div className="bg-white border rounded-lg p-4">
           <p className="text-sm text-gray-500 mb-1">Total em Aberto</p>
-          <p className="text-2xl font-bold text-gray-800">{formatCurrency(totalOpen)}</p>
+          <p className="text-2xl font-bold text-gray-800">{formatCurrency(total_open)}</p>
         </div>
         <div className="bg-white border rounded-lg p-4">
           <p className="text-sm text-gray-500 mb-1">Em Atraso</p>
-          <p className="text-2xl font-bold text-red-600">{formatCurrency(overdue)}</p>
+          <p className="text-2xl font-bold text-red-600">{formatCurrency(overdue_amount)}</p>
         </div>
         <div className="bg-white border rounded-lg p-4">
           <p className="text-sm text-gray-500 mb-1">A Vencer</p>
-          <p className="text-2xl font-bold text-blue-600">{formatCurrency(nextDue)}</p>
+          <p className="text-2xl font-bold text-blue-600">{formatCurrency(next_due_amount)}</p>
         </div>
       </div>
 
@@ -64,8 +65,7 @@ export default function DashboardClient({ orders, payments, clients }: Props) {
           <thead className="bg-gray-100">
             <tr>
               <th className="text-left px-4 py-3">Vencimento</th>
-              <th className="text-right px-4 py-3">Pedidos</th>
-              <th className="text-right px-4 py-3">Pagamentos</th>
+              <th className="text-right px-4 py-3">Total Pedidos</th>
               <th className="text-right px-4 py-3">Saldo</th>
               <th className="text-center px-4 py-3">Status</th>
             </tr>
@@ -73,24 +73,21 @@ export default function DashboardClient({ orders, payments, clients }: Props) {
           <tbody>
             {cycles.length === 0 && (
               <tr>
-                <td colSpan={5} className="text-center py-8 text-gray-400">Nenhum ciclo encontrado</td>
+                <td colSpan={4} className="text-center py-8 text-gray-400">Nenhum ciclo em aberto</td>
               </tr>
             )}
             {cycles.map((cycle: any) => (
               <tr key={cycle.due_date} className="border-t hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium">{formatDateBR(cycle.due_date)}</td>
-                <td className="px-4 py-3 text-right">{formatCurrency(cycle.orders_total)}</td>
-                <td className="px-4 py-3 text-right text-green-700">{formatCurrency(cycle.payments_total)}</td>
-                <td className="px-4 py-3 text-right font-semibold">
-                  {formatCurrency(cycle.balance)}
-                </td>
+                <td className="px-4 py-3 text-right">{formatCurrency(cycle.total_orders)}</td>
+                <td className="px-4 py-3 text-right font-semibold">{formatCurrency(cycle.remaining)}</td>
                 <td className="px-4 py-3 text-center">
-                  {cycle.balance <= 0 ? (
-                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Quitado</span>
-                  ) : cycle.overdue ? (
+                  {cycle.is_next_due ? (
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Próximo</span>
+                  ) : cycle.is_overdue ? (
                     <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">Atrasado</span>
                   ) : (
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">A vencer</span>
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">A vencer</span>
                   )}
                 </td>
               </tr>

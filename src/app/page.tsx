@@ -1,13 +1,18 @@
 import { sql } from '@/lib/db';
-import { calculateBalances, formatCurrency, formatDateBR, toISO } from '@/lib/billing';
+import { formatDateISO } from '@/lib/billing';
 import PrintButton from './PrintButton';
 import { getActiveClients } from '@/lib/actions';
 import DashboardClient from './DashboardClient';
 
+function toISO(val: any): string {
+  if (!val) return '';
+  if (val instanceof Date) return formatDateISO(val);
+  return String(val).substring(0, 10);
+}
+
 export default async function DashboardPage() {
   const clients = await getActiveClients() as any[];
 
-  // Load all orders and payments — client filtering done client-side
   const orderRows = await sql`SELECT * FROM orders ORDER BY due_date ASC, id ASC` as any[];
   const orders = orderRows.map((r: any) => ({
     ...r,
