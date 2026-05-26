@@ -1,226 +1,187 @@
-'use client'
+'use client';
 
-import { useState, useMemo, useTransition } from 'react'
-import { updateOrder, updateOrderImported } from '@/lib/actions'
-import { getDueDateFromString, formatCurrency, formatDateBR } from '@/lib/billing'
+import { useState, useEffect, useCallback } from 'react';
+import { updateOrder } from '@/lib/actions';
+import { Order, Item, Client } from '@/types';
+import { getDueDate, toISO, formatCurrency } from '@/lib/billing';
 
-interface Item {
-  id: string
-  name: string
-  unit_price: number
-  active: boolean
+// ─── ItemQtyInput DEFINED OUTSIDE PARENT — prevents focus loss bug ────────────
+function ItemQtyInput({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <input
+      type="number"
+      min={0}
+      step={0.01}
+      value={value === 0 ? '' : value}
+      onChange={e => onChange(parseFloat(e.target.value) || 0)}
+      className="border rounded px-2 py-1 w-24 text-right"
+      placeholder="0"
+    />
+  );
 }
-
-interface OrderItem {
-  item_id: string | null
-  item_name: string
-  quantity: number
-  unit_price: number
-  total_price: number
-}
-
-interface Order {
-  id: string
-  order_date: string
-  due_date: string
-  total_amount: number
-  description: string
-  imported: boolean
-  order_items?: OrderItem[]
-}
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface Props {
-  order: Order
-  items: Item[]
-  onClose: () => void
+  order: Order;
+  items: Item[];
+  clients: Client[];
+  onClose: () => void;
 }
 
-export default function EditOrderModal({ order, items, onClose }: Props) {
-  const toISO = (v: unknown) => v instanceof Date
-    ? v.toISOString().substring(0, 10)
-    : String(v).substring(0, 10)
+export default function EditOrderModal({ order, items, clients, onClose }: Props) {
+  const [orderDate, setOrderDate] = useState(order.order_date);
+  const [dueDate, setDueDate] = useState(order.due_date);
+  const [description, setDescription] = useState(order.description || '');
+  const [client, setClient] = useState(order.client || '');
+  const [quantities, setQuantities] = useState<Record<number, number>>({});
+  const [submitting, setSubmitting] = useState(false);
 
-  const [orderDate, setOrderDate]     = useState(toISO(order.order_date))
-  const [description, setDescription] = useState(order.description || '')
-  const [totalManual, setTotalManual] = useState(String(order.total_amount))
-  const [quantities, setQuantities]   = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {}
-    for (const oi of order.order_items ?? []) {
-      if (oi.item_id) init[oi.item_id] = String(oi.quantity)
-    }
-    return init
-  })
-  const [error, setError]   = useState('')
-  const [isPending, startTransition] = useTransition()
+  // Load existing order items
+  useEffect(() => {
+    fetch(`/api/orders?order_id=${order.id}`)
+      .then(r => r.json())
+      .then((orderItems: any[]) => {
+        const qMap: Record<number, number> = {};
+        orderItems.forEach(oi => { qMap[oi.item_id] = oi.quantity; });
+        setQuantities(qMap);
+      });
+  }, [order.id]);
 
-  const dueDate = useMemo(() =>
-    orderDate ? getDueDateFromString(orderDate) : '', [orderDate])
+  const setQty = useCallback((id: number, val: number) => {
+    setQuantities(prev => ({ ...prev, [id]: val }));
+  }, []);
 
-  const hasItems = (order.order_items ?? []).length > 0
+  const selectedItems = items
+    .filter(i => (quantities[i.id] ?? 0) > 0)
+    .map(i => ({
+      item_id: i.id,
+      item_name: i.name,
+      quantity: quantities[i.id],
+      unit_price: i.unit_price,
+    }));
 
-  const lines = useMemo(() =>
-    items
-      .map(item => {
-        const qty = parseFloat(quantities[item.id] ?? '') || 0
-        return qty > 0
-          ? { item_id: item.id, item_name: item.name, quantity: qty,
-              unit_price: item.unit_price,
-              total_price: Math.round(qty * item.unit_price * 100) / 100 }
-          : null
-      })
-      .filter(Boolean) as { item_id: string; item_name: string; quantity: number; unit_price: number; total_price: number }[]
-  , [items, quantities])
+  const total = selectedItems.reduce((s, i) => s + i.quantity * i.unit_price, 0);
 
-  const total = hasItems || !order.imported
-    ? lines.reduce((s, l) => s + l.total_price, 0)
-    : parseFloat(totalManual) || 0
-
-  const setQty = (id: string, val: string) =>
-    setQuantities(prev => ({ ...prev, [id]: val }))
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-
-    startTransition(async () => {
-      try {
-        if (order.imported && !hasItems) {
-          // Pedido importado sem itens: edita data, descrição e total
-          const amount = parseFloat(totalManual)
-          if (!amount || amount <= 0) { setError('Valor inválido.'); return }
-          await updateOrderImported(order.id, orderDate, description, amount)
-        } else {
-          // Pedido com itens: edita via linhas
-          if (!lines.length) { setError('Adicione ao menos um item.'); return }
-          await updateOrder(order.id, orderDate, description, lines)
-        }
-        onClose()
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'Erro ao salvar.')
-      }
-    })
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (selectedItems.length === 0) return alert('Selecione ao menos um item.');
+    setSubmitting(true);
+    await updateOrder(order.id, orderDate, dueDate, description, client, selectedItems);
+    setSubmitting(false);
+    onClose();
   }
 
-  // Items in alphabetical order, split into regular and hardware
-  const regularItems  = items.filter(i => !['Pino', 'Bucha', 'Meio'].some(p => i.name.startsWith(p)))
-  const hardwareItems = items.filter(i => ['Pino', 'Bucha', 'Meio'].some(p => i.name.startsWith(p)))
+  const regularItems = items.filter(i => !['pinos', 'buchas', 'hardware'].some(k => i.name.toLowerCase().includes(k)));
+  const hardwareItems = items.filter(i => ['pinos', 'buchas', 'hardware'].some(k => i.name.toLowerCase().includes(k)));
+
+  function renderGroup(group: Item[], label: string) {
+    if (group.length === 0) return null;
+    return (
+      <div className="mb-4">
+        <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{label}</p>
+        <div className="space-y-2">
+          {group.map(item => (
+            <div key={item.id} className="flex items-center gap-3">
+              <span className="flex-1 text-sm">{item.name}</span>
+              <span className="text-xs text-gray-400 w-20 text-right">R$ {item.unit_price.toFixed(2)}</span>
+              <ItemQtyInput value={quantities[item.id] ?? 0} onChange={v => setQty(item.id, v)} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-900">Editar Pedido</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-lg font-semibold">Editar Pedido #{order.id}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Data + descrição */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Data do Pedido *</label>
-              <input type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)}
-                className="input" required />
-              {dueDate && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Vencimento: <strong>{formatDateBR(dueDate)}</strong>
-                </p>
-              )}
+              <label className="block text-sm font-medium mb-1">Cliente *</label>
+              <select
+                value={client}
+                onChange={e => setClient(e.target.value)}
+                required
+                className="border rounded px-3 py-2 w-full"
+              >
+                {clients.map(c => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
+              </select>
             </div>
-            <div className="sm:col-span-2">
-              <label className="label">Descrição</label>
-              <input type="text" value={description} onChange={e => setDescription(e.target.value)}
-                className="input" />
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Data do Pedido</label>
+              <input
+                type="date"
+                value={orderDate}
+                onChange={e => setOrderDate(e.target.value)}
+                required
+                className="border rounded px-3 py-2 w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Vencimento
+                <span className="ml-2 text-xs font-normal text-gray-400">(editável)</span>
+              </label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={e => setDueDate(e.target.value)}
+                required
+                className="border rounded px-3 py-2 w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Descrição</label>
+              <input
+                type="text"
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                className="border rounded px-3 py-2 w-full"
+              />
             </div>
           </div>
 
-          {/* Pedido importado sem itens: só edita total */}
-          {order.imported && !hasItems ? (
-            <div>
-              <label className="label">Valor Total (R$) *</label>
-              <input type="number" min="0.01" step="0.01" value={totalManual}
-                onChange={e => setTotalManual(e.target.value)} className="input w-48" required />
-              <p className="text-xs text-gray-400 mt-1">
-                Pedido importado — edite o valor total diretamente.
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* Itens regulares */}
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-3">Itens do Pedido</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {regularItems.map(item => {
-                    const qty = quantities[item.id] ?? ''
-                    const sub = qty ? Math.round(parseFloat(qty) * item.unit_price * 100) / 100 : 0
-                    return (
-                      <div key={item.id}
-                        className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors ${qty ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-white'}`}>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
-                          <p className="text-xs text-gray-400">{formatCurrency(item.unit_price)}/un
-                            {qty ? <span className="ml-2 text-green-700 font-semibold">= {formatCurrency(sub)}</span> : ''}
-                          </p>
-                        </div>
-                        <input type="number" inputMode="numeric" min="0" max="99999" value={qty}
-                          onChange={e => setQty(item.id, e.target.value)}
-                          placeholder="0"
-                          className="w-28 rounded-md border border-gray-300 px-2 py-1 text-sm text-right focus:border-green-600 focus:ring-1 focus:ring-green-600 focus:outline-none"
-                        />
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
+          <div className="border rounded p-4">
+            {renderGroup(regularItems, 'Itens')}
+            {renderGroup(hardwareItems, 'Hardware / Pinos / Buchas')}
+          </div>
 
-              {/* Pinos e buchas */}
-              {hardwareItems.length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-gray-700 mb-3">Pinos, Buchas e Outros</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {hardwareItems.map(item => {
-                      const qty = quantities[item.id] ?? ''
-                      const sub = qty ? Math.round(parseFloat(qty) * item.unit_price * 100) / 100 : 0
-                      return (
-                        <div key={item.id}
-                          className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors ${qty ? 'border-green-400 bg-green-50' : 'border-gray-200 bg-white'}`}>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
-                            <p className="text-xs text-gray-400">{formatCurrency(item.unit_price)}/un
-                              {qty ? <span className="ml-2 text-green-700 font-semibold">= {formatCurrency(sub)}</span> : ''}
-                            </p>
-                          </div>
-                          <input type="number" inputMode="numeric" min="0" max="99999" value={qty}
-                            onChange={e => setQty(item.id, e.target.value)}
-                            placeholder="0"
-                            className="w-28 rounded-md border border-gray-300 px-2 py-1 text-sm text-right focus:border-green-600 focus:ring-1 focus:ring-green-600 focus:outline-none"
-                          />
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Total + botões */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-4 border-t border-gray-100">
-            <div>
-              <p className="text-sm text-gray-500">Total do pedido</p>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(total)}</p>
-            </div>
-            <div className="flex flex-col gap-2 items-end">
-              {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-1.5 rounded-lg">{error}</p>}
-              <div className="flex gap-2">
-                <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
-                <button type="submit" disabled={isPending} className="btn-primary">
-                  {isPending ? 'Salvando…' : 'Salvar Alterações'}
-                </button>
-              </div>
+          <div className="flex items-center justify-between pt-2">
+            <span className="text-sm font-medium">
+              Total: <span className="text-blue-700 font-bold">{formatCurrency(total)}</span>
+            </span>
+            <div className="flex gap-2">
+              <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-50">
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {submitting ? 'Salvando...' : 'Salvar'}
+              </button>
             </div>
           </div>
         </form>
       </div>
     </div>
-  )
+  );
 }
