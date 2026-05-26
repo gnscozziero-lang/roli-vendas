@@ -1,53 +1,55 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { sql } from '@/lib/db'
+import { NextRequest, NextResponse } from 'next/server';
+import { sql } from '@/lib/db';
+import { toISO } from '@/lib/billing';
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const from = searchParams.get('from')
-  const to   = searchParams.get('to')
+  const { searchParams } = new URL(req.url);
+  const start = searchParams.get('start');
+  const end = searchParams.get('end');
+  const client = searchParams.get('client');
 
-  if (!from || !to) {
-    return NextResponse.json({ error: 'Parâmetros from e to obrigatórios.' }, { status: 400 })
+  let orderRows: any[];
+
+  if (start && end && client) {
+    orderRows = await sql`
+      SELECT * FROM orders
+      WHERE order_date BETWEEN ${start} AND ${end}
+        AND client = ${client}
+      ORDER BY order_date ASC, id ASC
+    ` as any[];
+  } else if (start && end) {
+    orderRows = await sql`
+      SELECT * FROM orders
+      WHERE order_date BETWEEN ${start} AND ${end}
+      ORDER BY order_date ASC, id ASC
+    ` as any[];
+  } else if (client) {
+    orderRows = await sql`
+      SELECT * FROM orders
+      WHERE client = ${client}
+      ORDER BY order_date ASC, id ASC
+    ` as any[];
+  } else {
+    orderRows = await sql`
+      SELECT * FROM orders ORDER BY order_date ASC, id ASC
+    ` as any[];
   }
 
-  try {
-    // Busca pedidos no período
-    const orders = await sql`
-      SELECT id, order_date, due_date, total_amount, description
-      FROM orders
-      WHERE order_date BETWEEN ${from} AND ${to}
-      ORDER BY order_date ASC
-    `
+  const orders = await Promise.all(
+    orderRows.map(async (o: any) => {
+      const items = await sql`
+        SELECT * FROM order_items WHERE order_id = ${o.id}
+      ` as any[];
+      return {
+        ...o,
+        order_date: toISO(o.order_date),
+        due_date: toISO(o.due_date),
+        items,
+      };
+    })
+  );
 
-    // Busca itens de cada pedido
-    const orderIds = (orders as any[]).map((o: any) => o.id)
+  const total = orders.reduce((s, o) => s + Number(o.total_amount), 0);
 
-    let items: any[] = []
-    if (orderIds.length > 0) {
-      items = await sql`
-        SELECT order_id, item_name, quantity, unit_price, total_price
-        FROM order_items
-        WHERE order_id = ANY(${orderIds}::uuid[])
-        ORDER BY order_id, item_name
-      ` as any[]
-    }
-
-    // Agrupa itens por pedido
-    const itemsByOrder: Record<string, any[]> = {}
-    for (const item of items) {
-      const oid = item.order_id
-      if (!itemsByOrder[oid]) itemsByOrder[oid] = []
-      itemsByOrder[oid].push(item)
-    }
-
-    // Junta pedidos com seus itens
-    const result = (orders as any[]).map((o: any) => ({
-      ...o,
-      items: itemsByOrder[o.id] ?? [],
-    }))
-
-    return NextResponse.json({ orders: result })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
-  }
+  return NextResponse.json({ orders, total });
 }
