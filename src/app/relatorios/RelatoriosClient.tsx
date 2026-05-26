@@ -2,21 +2,64 @@
 
 import { useState } from 'react'
 import { Client } from '@/types'
-import { formatCurrency, formatDateBR } from '@/lib/billing'
+
+const PDF_CSS = `
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; font-size: 11px; color: #111; padding: 24px; }
+header { border-bottom: 2px solid #15803d; padding-bottom: 10px; margin-bottom: 16px; }
+header h1 { font-size: 16px; color: #15803d; }
+header p { font-size: 10px; color: #555; margin-top: 2px; }
+table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+th { background: #f0fdf4; color: #15803d; text-align: left; padding: 6px 8px; font-size: 10px; border-bottom: 2px solid #15803d; }
+td { padding: 5px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+tr:nth-child(even) td { background: #f9fafb; }
+.right { text-align: right; }
+.center { text-align: center; }
+.total-row td { font-weight: bold; background: #f0fdf4; border-top: 2px solid #15803d; }
+.section-title td { font-weight: bold; background: #e5e7eb; color: #374151; padding: 5px 8px; font-size: 10px; }
+.item-row td { color: #555; font-size: 10px; padding-left: 24px; }
+.sem-item td { color: #9ca3af; font-style: italic; padding-left: 20px; font-size: 10px; }
+.pgto td { color: #15803d; }
+.saldo-final { margin-top: 16px; text-align: right; font-size: 13px; font-weight: bold; }
+.saldo-final span { color: #dc2626; }
+footer { margin-top: 24px; border-top: 1px solid #e5e7eb; padding-top: 8px; font-size: 9px; color: #9ca3af; text-align: right; }
+@media print { body { padding: 12px; } }
+`
+
+function emitirPDF(html: string, titulo: string) {
+  const win = window.open('', '_blank')
+  if (!win) { alert('Permita pop-ups para gerar o PDF.'); return }
+  win.document.write(`<!DOCTYPE html><html lang="pt-BR">
+    <head><meta charset="UTF-8"/><title>${titulo}</title>
+    <style>${PDF_CSS}</style></head>
+    <body>${html}
+    <footer>Emitido em ${new Date().toLocaleString('pt-BR')}</footer>
+    <script>window.onload = () => { window.print(); }<\/script>
+    </body></html>`)
+  win.document.close()
+}
+
+function fmtBR(iso: string) {
+  if (!iso || iso.length < 10) return '—'
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+
+function fmtCurrency(v: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+}
 
 export default function RelatoriosClient({ clients }: { clients: Client[] }) {
   const [pedidosClient, setPedidosClient] = useState('')
   const [pedidosStart, setPedidosStart] = useState('')
   const [pedidosEnd, setPedidosEnd] = useState('')
-  const [pedidosData, setPedidosData] = useState<any>(null)
   const [loadingPedidos, setLoadingPedidos] = useState(false)
 
   const [extratoClient, setExtratoClient] = useState('')
   const [extratoDue, setExtratoDue] = useState('')
-  const [extratoData, setExtratoData] = useState<any>(null)
   const [loadingExtrato, setLoadingExtrato] = useState(false)
 
-  async function gerarPedidos() {
+  async function gerarPedidosPDF() {
     setLoadingPedidos(true)
     const params = new URLSearchParams()
     if (pedidosStart) params.set('start', pedidosStart)
@@ -24,45 +67,178 @@ export default function RelatoriosClient({ clients }: { clients: Client[] }) {
     if (pedidosClient) params.set('client', pedidosClient)
     const res = await fetch(`/api/relatorios/pedidos?${params}`)
     const data = await res.json()
-    setPedidosData(data)
     setLoadingPedidos(false)
+
+    const periodo = `${pedidosStart ? fmtBR(pedidosStart) : '—'} a ${pedidosEnd ? fmtBR(pedidosEnd) : '—'}`
+    const clienteLabel = pedidosClient || 'Todos os clientes'
+
+    let rows = ''
+    for (const o of data.orders ?? []) {
+      rows += `<tr>
+        <td><strong>${fmtBR(o.order_date)}</strong></td>
+        <td><strong>${fmtBR(o.due_date)}</strong></td>
+        <td><strong>${o.client} — ${o.description || '—'}</strong></td>
+        <td class="right"></td>
+        <td class="right"></td>
+        <td class="right"><strong>${fmtCurrency(Number(o.total_amount))}</strong></td>
+      </tr>`
+      if (o.items && o.items.length > 0) {
+        for (const item of o.items) {
+          rows += `<tr class="item-row">
+            <td></td><td></td>
+            <td style="padding-left:20px">${item.item_name}</td>
+            <td class="right">${item.quantity}</td>
+            <td class="right">${fmtCurrency(Number(item.unit_price))}</td>
+            <td class="right">${fmtCurrency(Number(item.total_price))}</td>
+          </tr>`
+        }
+      } else if (o.imported) {
+        rows += `<tr class="sem-item"><td colspan="6"><em>*Itens não detalhados (pedido importado)*</em></td></tr>`
+      }
+    }
+
+    const html = `
+      <header>
+        <h1>Relatório de Pedidos — Analítico</h1>
+        <p>Período: ${periodo} · Cliente: ${clienteLabel}</p>
+      </header>
+      <table>
+        <thead>
+          <tr>
+            <th>Data Pedido</th>
+            <th>Vencimento</th>
+            <th>Descrição / Item</th>
+            <th class="right">Qtd</th>
+            <th class="right">Preço Un.</th>
+            <th class="right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+          <tr class="total-row">
+            <td colspan="5">TOTAL DO PERÍODO</td>
+            <td class="right">${fmtCurrency(data.total ?? 0)}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="margin-top:12px;font-size:9px;color:#9ca3af">
+        * Pedidos importados da planilha histórica não possuem detalhamento por item. Novos pedidos lançados no sistema exibem todos os itens.
+      </p>`
+
+    emitirPDF(html, 'Relatório de Pedidos')
   }
 
-  async function gerarExtrato() {
+  async function gerarExtratoPDF() {
     setLoadingExtrato(true)
     const params = new URLSearchParams()
     if (extratoDue) params.set('due_date', extratoDue)
     if (extratoClient) params.set('client', extratoClient)
     const res = await fetch(`/api/relatorios/extrato?${params}`)
     const data = await res.json()
-    setExtratoData(data)
     setLoadingExtrato(false)
-  }
 
-  function imprimir(id: string) {
-    const el = document.getElementById(id)
-    if (!el) return
-    const win = window.open('', '_blank')
-    if (!win) return
-    win.document.write(`<html><head><title>Relatório</title>
-      <style>
-        body { font-family: Arial, sans-serif; font-size: 12px; padding: 24px; color: #111; }
-        h1 { font-size: 16px; margin-bottom: 4px; }
-        h2 { font-size: 13px; margin: 16px 0 8px; color: #555; }
-        table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-        th { background: #1a5c38; color: white; padding: 6px 10px; text-align: left; font-size: 11px; }
-        td { padding: 5px 10px; border-bottom: 1px solid #e5e7eb; font-size: 11px; }
-        .sub td { background: #f9fafb; color: #666; padding-left: 24px; }
-        .total td { font-weight: bold; background: #f0fdf4; }
-        .red { color: #dc2626; font-weight: bold; }
-        .green { color: #15803d; font-weight: bold; }
-        .right { text-align: right; }
-        .footer { margin-top: 24px; font-size: 10px; color: #9ca3af; text-align: right; }
-      </style></head><body>${el.innerHTML}
-      <div class="footer">Emitido em ${new Date().toLocaleString('pt-BR')}</div>
-      </body></html>`)
-    win.document.close()
-    win.print()
+    const dueLabel = fmtBR(data.due_date ?? extratoDue)
+    const hoje = fmtBR(new Date().toISOString().split('T')[0])
+    const overdue = Number(data.overdue ?? 0)
+    const upcoming = Number(data.upcoming ?? 0)
+    const totalOpen = Number(data.total_open ?? 0)
+    const orders = data.orders ?? []
+    const payments = data.payments ?? []
+    const subtotalPedidos = orders.reduce((s: number, o: any) => s + Number(o.total_amount), 0)
+    const subtotalPagamentos = payments.reduce((s: number, p: any) => s + Number(p.amount), 0)
+    const totalDevedor = overdue + upcoming + subtotalPedidos
+
+    let rows = ''
+
+    // 1. Saldo em atraso
+    if (overdue > 0) {
+      rows += `<tr class="section-title"><td colspan="4">SALDO EM ATRASO (ciclos vencidos antes de ${hoje})</td></tr>
+      <tr>
+        <td>—</td>
+        <td>Saldo de ciclos vencidos em aberto</td>
+        <td class="right" style="color:#dc2626;font-weight:bold">${fmtCurrency(overdue)}</td>
+        <td class="right">—</td>
+      </tr>`
+    }
+
+    // 2. Saldo a vencer
+    if (upcoming > 0) {
+      rows += `<tr class="section-title"><td colspan="4">SALDO A VENCER (ciclos futuros em aberto)</td></tr>
+      <tr>
+        <td>—</td>
+        <td>Saldo de ciclos ainda não vencidos</td>
+        <td class="right" style="color:#d97706;font-weight:bold">${fmtCurrency(upcoming)}</td>
+        <td class="right">—</td>
+      </tr>`
+    }
+
+    // 3. Pedidos do ciclo
+    rows += `<tr class="section-title"><td colspan="4">PEDIDOS DO CICLO — vencimento ${dueLabel}</td></tr>`
+    if (orders.length === 0) {
+      rows += `<tr><td colspan="4" style="color:#999;padding:6px 8px">Nenhum pedido neste ciclo.</td></tr>`
+    } else {
+      for (const o of orders) {
+        rows += `<tr>
+          <td>${fmtBR(o.order_date)}</td>
+          <td>${o.description || '—'}</td>
+          <td class="right">${fmtCurrency(Number(o.total_amount))}</td>
+          <td class="right">—</td>
+        </tr>`
+      }
+    }
+    rows += `<tr class="total-row">
+      <td colspan="2">Subtotal Pedidos do Ciclo</td>
+      <td class="right">${fmtCurrency(subtotalPedidos)}</td>
+      <td></td>
+    </tr>`
+
+    // 4. Total devedor
+    if (overdue > 0 || upcoming > 0) {
+      rows += `<tr class="total-row">
+        <td colspan="2">TOTAL DEVEDOR (atraso + a vencer + ciclo atual)</td>
+        <td class="right">${fmtCurrency(totalDevedor)}</td>
+        <td></td>
+      </tr>`
+    }
+
+    // 5. Pagamentos
+    rows += `<tr class="section-title"><td colspan="4">PAGAMENTOS RECEBIDOS — referentes ao vencimento ${dueLabel}</td></tr>`
+    if (payments.length === 0) {
+      rows += `<tr><td colspan="4" style="color:#999;padding:6px 8px">Nenhum pagamento registrado.</td></tr>`
+    } else {
+      for (const p of payments) {
+        rows += `<tr class="pgto">
+          <td>${fmtBR(p.payment_date)}</td>
+          <td>${p.notes || 'Pagamento'}</td>
+          <td class="right">—</td>
+          <td class="right">${fmtCurrency(Number(p.amount))}</td>
+        </tr>`
+      }
+    }
+    rows += `<tr class="total-row">
+      <td colspan="3">Subtotal Pagamentos</td>
+      <td class="right">${fmtCurrency(subtotalPagamentos)}</td>
+    </tr>`
+
+    const html = `
+      <header>
+        <h1>Extrato por Vencimento</h1>
+        <p>Vencimento: ${dueLabel} — Emitido com base em: ${hoje}</p>
+      </header>
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Descrição</th>
+            <th class="right">Débito</th>
+            <th class="right">Crédito (Pagamento)</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="saldo-final">Saldo em aberto: <span>${fmtCurrency(totalOpen)}</span></div>`
+
+    emitirPDF(html, 'Extrato por Vencimento')
   }
 
   return (
@@ -92,58 +268,9 @@ export default function RelatoriosClient({ clients }: { clients: Client[] }) {
           </div>
         </div>
         <p className="text-xs text-gray-400">Pedidos importados sem itens detalhados aparecem com o valor total.</p>
-        <div className="flex gap-2">
-          <button onClick={gerarPedidos} disabled={loadingPedidos} className="btn-primary flex-1">
-            {loadingPedidos ? 'Carregando…' : '📄 Gerar'}
-          </button>
-          {pedidosData && (
-            <button onClick={() => imprimir('print-pedidos')} className="btn-secondary">🖨️ Imprimir</button>
-          )}
-        </div>
-
-        {pedidosData && (
-          <div id="print-pedidos" className="mt-2">
-            <h1>Relatório de Pedidos</h1>
-            <p style={{fontSize: '11px', color: '#555', marginBottom: '8px'}}>
-              {pedidosClient || 'Todos os clientes'} · {pedidosStart || '—'} a {pedidosEnd || '—'} · Total: {formatCurrency(pedidosData.total ?? 0)}
-            </p>
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr>
-                  <th className="bg-green-800 text-white px-3 py-2 text-left">Data</th>
-                  <th className="bg-green-800 text-white px-3 py-2 text-left">Cliente</th>
-                  <th className="bg-green-800 text-white px-3 py-2 text-left">Descrição</th>
-                  <th className="bg-green-800 text-white px-3 py-2 text-left">Vencimento</th>
-                  <th className="bg-green-800 text-white px-3 py-2 text-right">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(pedidosData.orders ?? []).map((o: any) => (
-                  <>
-                    <tr key={o.id} className="border-b">
-                      <td className="px-3 py-1">{formatDateBR(o.order_date)}</td>
-                      <td className="px-3 py-1 font-medium">{o.client}</td>
-                      <td className="px-3 py-1">{o.description || '—'}</td>
-                      <td className="px-3 py-1">{formatDateBR(o.due_date)}</td>
-                      <td className="px-3 py-1 text-right font-semibold">{formatCurrency(Number(o.total_amount))}</td>
-                    </tr>
-                    {(o.items ?? []).map((item: any) => (
-                      <tr key={item.id} className="bg-gray-50 text-gray-500">
-                        <td className="px-3 py-0.5" colSpan={3}></td>
-                        <td className="px-3 py-0.5 pl-8">↳ {item.item_name} × {item.quantity}</td>
-                        <td className="px-3 py-0.5 text-right">{formatCurrency(Number(item.total_price))}</td>
-                      </tr>
-                    ))}
-                  </>
-                ))}
-                <tr className="bg-green-50 font-bold">
-                  <td colSpan={4} className="px-3 py-2">TOTAL DO PERÍODO</td>
-                  <td className="px-3 py-2 text-right">{formatCurrency(pedidosData.total ?? 0)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
+        <button onClick={gerarPedidosPDF} disabled={loadingPedidos} className="btn-primary w-full">
+          {loadingPedidos ? 'Gerando…' : '📄 Gerar PDF'}
+        </button>
       </div>
 
       {/* Extrato por Vencimento */}
@@ -164,91 +291,11 @@ export default function RelatoriosClient({ clients }: { clients: Client[] }) {
           <input type="date" value={extratoDue} onChange={e => setExtratoDue(e.target.value)} className="input" />
         </div>
         <p className="text-xs text-gray-400">Pagamentos são abatidos do ciclo mais antigo primeiro.</p>
-        <div className="flex gap-2">
-          <button onClick={gerarExtrato} disabled={loadingExtrato} className="btn-primary flex-1">
-            {loadingExtrato ? 'Carregando…' : '📄 Gerar'}
-          </button>
-          {extratoData && (
-            <button onClick={() => imprimir('print-extrato')} className="btn-secondary">🖨️ Imprimir</button>
-          )}
-        </div>
-
-        {extratoData && (
-          <div id="print-extrato" className="mt-2 space-y-4">
-            <h1>Extrato — Vencimento {formatDateBR(extratoData.due_date)}</h1>
-            {extratoData.overdue > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-red-600 uppercase mb-1">Saldo em Atraso</p>
-                <p className="text-xl font-bold text-red-600">{formatCurrency(extratoData.overdue)}</p>
-              </div>
-            )}
-            <div>
-              <p className="text-xs font-semibold text-orange-600 uppercase mb-1">Saldo a Vencer</p>
-              <p className="text-xl font-bold text-gray-800">{formatCurrency(extratoData.upcoming ?? 0)}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-gray-600 uppercase mb-2">Pedidos do Ciclo</p>
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr>
-                    <th className="bg-green-800 text-white px-3 py-1.5 text-left">Data</th>
-                    <th className="bg-green-800 text-white px-3 py-1.5 text-left">Cliente</th>
-                    <th className="bg-green-800 text-white px-3 py-1.5 text-left">Descrição</th>
-                    <th className="bg-green-800 text-white px-3 py-1.5 text-right">Débito</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(extratoData.orders ?? []).map((o: any) => (
-                    <tr key={o.id} className="border-b">
-                      <td className="px-3 py-1">{formatDateBR(o.order_date)}</td>
-                      <td className="px-3 py-1">{o.client}</td>
-                      <td className="px-3 py-1">{o.description || '—'}</td>
-                      <td className="px-3 py-1 text-right">{formatCurrency(Number(o.total_amount))}</td>
-                    </tr>
-                  ))}
-                  <tr className="bg-gray-50 font-semibold">
-                    <td colSpan={3} className="px-3 py-1">Subtotal Pedidos</td>
-                    <td className="px-3 py-1 text-right">{formatCurrency((extratoData.orders ?? []).reduce((s: number, o: any) => s + Number(o.total_amount), 0))}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-green-700 uppercase mb-2">Pagamentos Recebidos</p>
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr>
-                    <th className="bg-green-800 text-white px-3 py-1.5 text-left">Data</th>
-                    <th className="bg-green-800 text-white px-3 py-1.5 text-left">Cliente</th>
-                    <th className="bg-green-800 text-white px-3 py-1.5 text-left">Obs</th>
-                    <th className="bg-green-800 text-white px-3 py-1.5 text-right">Crédito</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(extratoData.payments ?? []).map((p: any) => (
-                    <tr key={p.id} className="border-b">
-                      <td className="px-3 py-1">{formatDateBR(p.payment_date)}</td>
-                      <td className="px-3 py-1">{p.client}</td>
-                      <td className="px-3 py-1">{p.notes || '—'}</td>
-                      <td className="px-3 py-1 text-right text-green-700 font-semibold">{formatCurrency(Number(p.amount))}</td>
-                    </tr>
-                  ))}
-                  <tr className="bg-gray-50 font-semibold">
-                    <td colSpan={3} className="px-3 py-1">Subtotal Pagamentos</td>
-                    <td className="px-3 py-1 text-right text-green-700">{formatCurrency((extratoData.payments ?? []).reduce((s: number, p: any) => s + Number(p.amount), 0))}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div className="pt-2 border-t-2 border-gray-300">
-              <div className="flex justify-between items-center">
-                <p className="font-semibold text-gray-700">Saldo em aberto:</p>
-                <p className="text-xl font-bold text-red-600">{formatCurrency(extratoData.total_open ?? 0)}</p>
-              </div>
-            </div>
-          </div>
-        )}
+        <button onClick={gerarExtratoPDF} disabled={loadingExtrato} className="btn-primary w-full">
+          {loadingExtrato ? 'Gerando…' : '📄 Gerar PDF'}
+        </button>
       </div>
+
     </div>
   )
 }
