@@ -1,115 +1,127 @@
-'use client'
+'use client';
 
-import { useState, useTransition } from 'react'
-import { createPayment } from '@/lib/actions'
-import { formatCurrency, formatDateBR, todayISO } from '@/lib/billing'
+import { useState } from 'react';
+import { createPayment } from '@/lib/actions';
+import { Client } from '@/types';
 
-interface Ciclo { due_date: string }
 interface Props {
-  totalOpen: number
-  nextDueAmount: number
-  nextDueDate: string | null
-  ciclos: Ciclo[]
+  clients: Client[];
+  dueDateOptions: string[]; // list of unique due_dates from orders for the dropdown
 }
 
-export default function NovoPagamentoForm({ totalOpen, nextDueAmount, nextDueDate, ciclos }: Props) {
-  const [date,     setDate]     = useState(todayISO())
-  const [amount,   setAmount]   = useState('')
-  const [notes,    setNotes]    = useState('')
-  const [dueRef,   setDueRef]   = useState(nextDueDate ?? '')
-  const [error,    setError]    = useState('')
-  const [success,  setSuccess]  = useState('')
-  const [isPending, startTransition] = useTransition()
+export default function NovoPagamentoForm({ clients, dueDateOptions }: Props) {
+  const today = new Date().toISOString().split('T')[0];
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setSuccess('')
-    const value = parseFloat(amount)
-    if (!date)              { setError('Informe a data.'); return }
-    if (!value || value<=0) { setError('Informe um valor válido.'); return }
-    if (!dueRef)            { setError('Selecione o vencimento ao qual este pagamento se refere.'); return }
+  const [paymentDate, setPaymentDate] = useState(today);
+  const [amount, setAmount] = useState('');
+  const [notes, setNotes] = useState('');
+  const [dueDateRef, setDueDateRef] = useState('');
+  const [client, setClient] = useState(clients[0]?.name ?? '');
+  const [submitting, setSubmitting] = useState(false);
 
-    startTransition(async () => {
-      try {
-        await createPayment(date, value, notes, dueRef)
-        setAmount('')
-        setNotes('')
-        setSuccess(`Pagamento de ${formatCurrency(value)} registrado — referente ao vencimento de ${formatDateBR(dueRef)}.`)
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'Erro ao registrar pagamento.')
-      }
-    })
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!amount || parseFloat(amount) <= 0) return alert('Informe um valor válido.');
+    if (!client) return alert('Selecione um cliente.');
+
+    setSubmitting(true);
+    const fd = new FormData();
+    fd.append('payment_date', paymentDate);
+    fd.append('amount', amount);
+    fd.append('notes', notes);
+    fd.append('due_date_ref', dueDateRef);
+    fd.append('client', client);
+    await createPayment(fd);
+
+    setAmount('');
+    setNotes('');
+    setDueDateRef('');
+    setSubmitting(false);
   }
 
-  const fill = (val: number) => setAmount(String(val))
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div>
-          <label className="label">Data do Pagamento *</label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            className="input" required />
-        </div>
+    <form onSubmit={handleSubmit} className="bg-white border rounded-lg p-6 space-y-4">
+      <h2 className="text-lg font-semibold">Novo Pagamento</h2>
 
+      <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="label">Valor (R$) *</label>
-          <input
-            type="number" min="0.01" step="0.01"
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            placeholder="0,00"
-            className="input"
+          <label className="block text-sm font-medium mb-1">Cliente *</label>
+          <select
+            value={client}
+            onChange={e => setClient(e.target.value)}
             required
-          />
-          <div className="flex flex-wrap gap-1 mt-2">
-            {nextDueDate && nextDueAmount > 0 && (
-              <button type="button" onClick={() => fill(nextDueAmount)}
-                className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 hover:bg-yellow-200 transition-colors">
-                Próx. venc. {formatCurrency(nextDueAmount)}
-              </button>
-            )}
-            {totalOpen > 0 && (
-              <button type="button" onClick={() => fill(totalOpen)}
-                className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 hover:bg-red-100 transition-colors">
-                Total {formatCurrency(totalOpen)}
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div>
-          <label className="label">Referente ao vencimento *</label>
-          <select value={dueRef} onChange={e => setDueRef(e.target.value)} className="input" required>
-            <option value="">Selecione…</option>
-            {ciclos.map(c => (
-              <option key={c.due_date} value={c.due_date}>
-                {formatDateBR(c.due_date)}
-              </option>
+            className="border rounded px-3 py-2 w-full"
+          >
+            <option value="">Selecione...</option>
+            {clients.map(c => (
+              <option key={c.id} value={c.name}>{c.name}</option>
             ))}
           </select>
-          <p className="text-xs text-gray-400 mt-1">Ciclo ao qual este pagamento pertence</p>
         </div>
 
         <div>
-          <label className="label">Observação</label>
-          <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
-            placeholder="ex: PIX 06/04" className="input" />
+          <label className="block text-sm font-medium mb-1">Data do Pagamento</label>
+          <input
+            type="date"
+            value={paymentDate}
+            onChange={e => setPaymentDate(e.target.value)}
+            required
+            className="border rounded px-3 py-2 w-full"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">Valor (R$)</label>
+          <input
+            type="number"
+            step="0.01"
+            min="0.01"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            required
+            className="border rounded px-3 py-2 w-full"
+            placeholder="0,00"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Vencimento de referência
+            <span className="ml-2 text-xs font-normal text-gray-400">(ciclo quitado)</span>
+          </label>
+          <select
+            value={dueDateRef}
+            onChange={e => setDueDateRef(e.target.value)}
+            className="border rounded px-3 py-2 w-full"
+          >
+            <option value="">Não especificado</option>
+            {dueDateOptions.map(d => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="col-span-2">
+          <label className="block text-sm font-medium mb-1">Observações</label>
+          <input
+            type="text"
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            className="border rounded px-3 py-2 w-full"
+            placeholder="Opcional"
+          />
         </div>
       </div>
 
-      <div className="rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-700">
-        <strong>Atenção:</strong> selecione o vencimento ao qual o pagamento se refere, independente da data em que foi recebido.
-        O extrato e o saldo serão calculados com base nessa referência.
+      <div className="flex justify-end">
+        <button
+          type="submit"
+          disabled={submitting}
+          className="bg-green-600 text-white px-5 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+        >
+          {submitting ? 'Salvando...' : 'Salvar Pagamento'}
+        </button>
       </div>
-
-      {error   && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-      {success && <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-lg">{success}</p>}
-
-      <button type="submit" disabled={isPending} className="btn-primary">
-        {isPending ? 'Salvando…' : 'Registrar Pagamento'}
-      </button>
     </form>
-  )
+  );
 }
