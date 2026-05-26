@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { updateOrder } from '@/lib/actions';
 import { Order, Item, Client } from '@/types';
-import { getDueDate, toISO, formatCurrency } from '@/lib/billing';
+import { formatCurrency, formatDateISO } from '@/lib/billing';
 
 // ─── ItemQtyInput DEFINED OUTSIDE PARENT — prevents focus loss bug ────────────
 function ItemQtyInput({
