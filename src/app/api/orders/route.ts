@@ -3,7 +3,7 @@ import { sql } from '@/lib/db'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const id = searchParams.get('id')
+  const id = searchParams.get('order_id') || searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 })
 
   try {
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
       FROM order_items WHERE order_id = ${id}
       ORDER BY item_name
     `
-    return NextResponse.json({ items })
+    return NextResponse.json(items)
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }

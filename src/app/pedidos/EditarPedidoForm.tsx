@@ -21,32 +21,35 @@ interface Props {
   order: {
     id: string
     order_date: string
+    due_date: string
     description: string
     total_amount: number
+    client: string
   }
   existingItems: ExistingItem[]
   allItems: Item[]
+  clients: { id: string; name: string }[]
   onClose: () => void
 }
 
-export default function EditarPedidoForm({ order, existingItems, allItems, onClose }: Props) {
-  // Inicializa quantidades com os itens existentes do pedido
+export default function EditarPedidoForm({ order, existingItems, allItems, clients, onClose }: Props) {
   const initialQtys: Record<string, string> = {}
   for (const ei of existingItems) {
     const found = allItems.find(i => i.name === ei.item_name)
-    if (found) {
-      initialQtys[found.id] = String(ei.quantity)
-    }
+    if (found) initialQtys[found.id] = String(ei.quantity)
   }
 
-  const [orderDate,    setOrderDate]   = useState(order.order_date.substring(0, 10))
-  const [description,  setDescription] = useState(order.description || '')
-  const [quantities,   setQuantities]  = useState<Record<string, string>>(initialQtys)
-  const [error,        setError]       = useState('')
-  const [success,      setSuccess]     = useState('')
-  const [isPending, startTransition]   = useTransition()
+  const [orderDate,   setOrderDate]   = useState(order.order_date.substring(0, 10))
+  const [dueDate,     setDueDate]     = useState(order.due_date.substring(0, 10))
+  const [description, setDescription] = useState(order.description || '')
+  const [client,      setClient]      = useState(order.client || '')
+  const [quantities,  setQuantities]  = useState<Record<string, string>>(initialQtys)
+  const [error,       setError]       = useState('')
+  const [success,     setSuccess]     = useState('')
+  const [isPending, startTransition]  = useTransition()
 
-  const dueDate = useMemo(() => orderDate ? getDueDateFromString(orderDate) : '', [orderDate])
+  // Auto-suggest due_date when order_date changes, but keep it editable
+  const suggestedDue = useMemo(() => orderDate ? getDueDateFromString(orderDate) : '', [orderDate])
 
   const lines = useMemo(() =>
     allItems
@@ -54,13 +57,13 @@ export default function EditarPedidoForm({ order, existingItems, allItems, onClo
         const qty = parseFloat(quantities[item.id] ?? '') || 0
         return qty > 0
           ? { item_id: item.id, item_name: item.name, quantity: qty,
-              unit_price: item.unit_price, total_price: Math.round(qty * item.unit_price * 100) / 100 }
+              unit_price: item.unit_price }
           : null
       })
-      .filter(Boolean) as { item_id: string; item_name: string; quantity: number; unit_price: number; total_price: number }[]
+      .filter(Boolean) as { item_id: string; item_name: string; quantity: number; unit_price: number }[]
   , [allItems, quantities])
 
-  const total = lines.reduce((s, l) => s + l.total_price, 0)
+  const total = lines.reduce((s, l) => s + l.quantity * l.unit_price, 0)
   const setQty = (id: string, val: string) => setQuantities(prev => ({ ...prev, [id]: val }))
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -68,11 +71,12 @@ export default function EditarPedidoForm({ order, existingItems, allItems, onClo
     setError('')
     setSuccess('')
     if (!orderDate)    { setError('Informe a data do pedido.'); return }
+    if (!client)       { setError('Selecione um cliente.'); return }
     if (!lines.length) { setError('Adicione ao menos um item com quantidade.'); return }
 
     startTransition(async () => {
       try {
-        await updateOrder(order.id, orderDate, description, lines)
+        await updateOrder(order.id, orderDate, dueDate, description, client, lines)
         setSuccess('Pedido atualizado com sucesso!')
         setTimeout(() => onClose(), 1200)
       } catch (err: unknown) {
@@ -90,26 +94,31 @@ export default function EditarPedidoForm({ order, existingItems, allItems, onClo
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Data + descrição */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="label">Cliente *</label>
+              <select value={client} onChange={e => setClient(e.target.value)} className="input" required>
+                <option value="">Selecione...</option>
+                {clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
+            </div>
             <div>
               <label className="label">Data do Pedido *</label>
-              <input type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)}
-                className="input" required />
-              {dueDate && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Vencimento: <strong>{formatDateBR(dueDate)}</strong>
-                </p>
+              <input type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)} className="input" required />
+            </div>
+            <div>
+              <label className="label">Vencimento <span className="text-xs font-normal text-gray-400">(editável)</span></label>
+              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="input" required />
+              {suggestedDue && suggestedDue !== dueDate && (
+                <p className="text-xs text-gray-400 mt-1">Sugerido pelo ciclo: <button type="button" className="underline" onClick={() => setDueDate(suggestedDue)}>{formatDateBR(suggestedDue)}</button></p>
               )}
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <label className="label">Descrição / Observação</label>
-              <input type="text" value={description} onChange={e => setDescription(e.target.value)}
-                placeholder="ex: pedido 13/04" className="input" />
+              <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="ex: pedido 13/04" className="input" />
             </div>
           </div>
 
-          {/* Itens em ordem alfabética */}
           <div>
             <p className="text-sm font-medium text-gray-700 mb-3">Itens do Pedido</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -138,7 +147,6 @@ export default function EditarPedidoForm({ order, existingItems, allItems, onClo
             </div>
           </div>
 
-          {/* Total + ações */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-4 border-t border-gray-100">
             <div>
               <p className="text-sm text-gray-500">Total do pedido</p>
