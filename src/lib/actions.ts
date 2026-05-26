@@ -218,3 +218,7 @@ export async function importData(data: {
 
   revalidatePath('/');
 }
+
+// ─── ALIASES — compatibilidade com código existente ──────────────────────────
+export const addItem = createItem;
+export const updateItem = updateItemPrice;
