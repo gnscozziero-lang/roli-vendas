@@ -1,102 +1,120 @@
-'use client'
+'use client';
 
-import { useState, useTransition } from 'react'
-import { updatePayment } from '@/lib/actions'
-import { formatCurrency, formatDateBR } from '@/lib/billing'
+import { useState } from 'react';
+import { updatePayment } from '@/lib/actions';
+import { Payment, Client } from '@/types';
 
-interface Ciclo { due_date: string }
-interface Payment {
-  id: string
-  payment_date: string
-  amount: number
-  notes: string
-  due_date_ref: string | null
-}
 interface Props {
-  payment: Payment
-  ciclos: Ciclo[]
-  onClose: () => void
+  payment: Payment;
+  clients: Client[];
+  onClose: () => void;
 }
 
-export default function EditPaymentModal({ payment, ciclos, onClose }: Props) {
-  const toISO = (v: unknown) => !v ? '' : v instanceof Date ? v.toISOString().substring(0, 10) : String(v).substring(0, 10)
+export default function EditPaymentModal({ payment, clients, onClose }: Props) {
+  const [paymentDate, setPaymentDate] = useState(payment.payment_date);
+  const [amount, setAmount] = useState(String(payment.amount));
+  const [notes, setNotes] = useState(payment.notes || '');
+  const [dueDateRef, setDueDateRef] = useState(payment.due_date_ref || '');
+  const [client, setClient] = useState(payment.client || '');
+  const [submitting, setSubmitting] = useState(false);
 
-  const [date,    setDate]    = useState(toISO(payment.payment_date))
-  const [amount,  setAmount]  = useState(String(payment.amount))
-  const [notes,   setNotes]   = useState(payment.notes || '')
-  const [dueRef,  setDueRef]  = useState(toISO(payment.due_date_ref) || '')
-  const [error,   setError]   = useState('')
-  const [isPending, startTransition] = useTransition()
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    const value = parseFloat(amount)
-    if (!date)             { setError('Informe a data.'); return }
-    if (!value || value<=0){ setError('Informe um valor válido.'); return }
-    if (!dueRef)           { setError('Selecione o vencimento de referência.'); return }
-
-    startTransition(async () => {
-      try {
-        await updatePayment(payment.id, date, value, notes, dueRef)
-        onClose()
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : 'Erro ao salvar.')
-      }
-    })
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    await updatePayment(
+      payment.id,
+      paymentDate,
+      parseFloat(amount),
+      notes,
+      dueDateRef || null,
+      client
+    );
+    setSubmitting(false);
+    onClose();
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-900">Editar Pagamento</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-lg font-semibold">Editar Pagamento #{payment.id}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Data do Pagamento *</label>
-              <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                className="input" required />
-            </div>
-            <div>
-              <label className="label">Valor (R$) *</label>
-              <input type="number" min="0.01" step="0.01"
-                value={amount} onChange={e => setAmount(e.target.value)}
-                className="input" required />
-            </div>
-          </div>
-
           <div>
-            <label className="label">Referente ao vencimento *</label>
-            <select value={dueRef} onChange={e => setDueRef(e.target.value)} className="input" required>
-              <option value="">Selecione…</option>
-              {ciclos.map(c => (
-                <option key={c.due_date} value={c.due_date}>
-                  {formatDateBR(c.due_date)}
-                </option>
+            <label className="block text-sm font-medium mb-1">Cliente *</label>
+            <select
+              value={client}
+              onChange={e => setClient(e.target.value)}
+              required
+              className="border rounded px-3 py-2 w-full"
+            >
+              {clients.map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="label">Observação</label>
-            <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
-              placeholder="ex: PIX 06/04" className="input" />
+            <label className="block text-sm font-medium mb-1">Data do Pagamento</label>
+            <input
+              type="date"
+              value={paymentDate}
+              onChange={e => setPaymentDate(e.target.value)}
+              required
+              className="border rounded px-3 py-2 w-full"
+            />
           </div>
 
-          {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+          <div>
+            <label className="block text-sm font-medium mb-1">Valor (R$)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              required
+              className="border rounded px-3 py-2 w-full"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Vencimento de referência
+            </label>
+            <input
+              type="date"
+              value={dueDateRef}
+              onChange={e => setDueDateRef(e.target.value)}
+              className="border rounded px-3 py-2 w-full"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Observações</label>
+            <input
+              type="text"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              className="border rounded px-3 py-2 w-full"
+            />
+          </div>
 
           <div className="flex gap-2 justify-end pt-2">
-            <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
-            <button type="submit" disabled={isPending} className="btn-primary">
-              {isPending ? 'Salvando…' : 'Salvar Alterações'}
+            <button type="button" onClick={onClose} className="px-4 py-2 border rounded hover:bg-gray-50">
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="bg-green-600 text-white px-5 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+            >
+              {submitting ? 'Salvando...' : 'Salvar'}
             </button>
           </div>
         </form>
       </div>
     </div>
-  )
+  );
 }
