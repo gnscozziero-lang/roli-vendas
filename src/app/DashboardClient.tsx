@@ -18,6 +18,8 @@ export default function DashboardClient({ orders, payments, clients, initialBala
 
   const filteredOrders = selectedClient ? orders.filter(o => o.client === selectedClient) : orders
   const filteredPayments = selectedClient ? payments.filter(p => p.client === selectedClient) : payments
+  const filteredRecentOrders = selectedClient ? recentOrders.filter(o => o.client === selectedClient) : recentOrders
+  const filteredRecentPayments = selectedClient ? recentPayments.filter(p => p.client === selectedClient) : recentPayments
   const balanceToUse = selectedClient ? 0 : initialBalance
 
   const { cycles, total_open, overdue_amount, next_due_amount, next_due_date } =
@@ -27,14 +29,10 @@ export default function DashboardClient({ orders, payments, clients, initialBala
 
   return (
     <div className="space-y-6">
-      {/* Client filter — NEW */}
+      {/* Client filter */}
       <div className="flex items-center gap-3 print:hidden">
         <label className="label mb-0">Cliente:</label>
-        <select
-          value={selectedClient}
-          onChange={e => setSelectedClient(e.target.value)}
-          className="input w-48"
-        >
+        <select value={selectedClient} onChange={e => setSelectedClient(e.target.value)} className="input w-48">
           <option value="">Todos os clientes</option>
           {clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
         </select>
@@ -44,9 +42,7 @@ export default function DashboardClient({ orders, payments, clients, initialBala
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="card p-6">
           <p className="text-sm text-gray-500 mb-1">Total em Aberto</p>
-          <p className={`text-3xl font-bold ${total_open > 0 ? 'text-red-600' : 'text-green-700'}`}>
-            {formatCurrency(total_open)}
-          </p>
+          <p className={`text-3xl font-bold ${total_open > 0 ? 'text-red-600' : 'text-green-700'}`}>{formatCurrency(total_open)}</p>
         </div>
         <div className="card p-6">
           <p className="text-sm text-gray-500 mb-1">Próximo Vencimento</p>
@@ -55,9 +51,7 @@ export default function DashboardClient({ orders, payments, clients, initialBala
         </div>
         <div className="card p-6">
           <p className="text-sm text-gray-500 mb-1">Em Atraso</p>
-          <p className={`text-3xl font-bold ${overdue_amount > 0 ? 'text-red-600' : 'text-green-700'}`}>
-            {formatCurrency(overdue_amount)}
-          </p>
+          <p className={`text-3xl font-bold ${overdue_amount > 0 ? 'text-red-600' : 'text-green-700'}`}>{formatCurrency(overdue_amount)}</p>
         </div>
       </div>
 
@@ -103,15 +97,13 @@ export default function DashboardClient({ orders, payments, clients, initialBala
         <div className="card p-6">
           <h2 className="font-semibold text-gray-800 mb-4">Últimos Pedidos</h2>
           <div className="space-y-3">
-            {recentOrders.length === 0 && <p className="text-sm text-gray-400">Nenhum pedido encontrado</p>}
-            {recentOrders.map((o: any) => (
+            {filteredRecentOrders.length === 0 && <p className="text-sm text-gray-400">Nenhum pedido encontrado</p>}
+            {filteredRecentOrders.slice(0, 5).map((o: any) => (
               <div key={o.id} className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-medium text-gray-800">{formatDateBR(o.order_date)}</p>
                   <p className="text-xs text-gray-400 truncate max-w-[180px]">{o.description || '—'}</p>
-                  <p className="text-xs text-gray-400">
-                    {o.due_date < today ? 'venceu' : 'vence'} {formatDateBR(o.due_date)}
-                  </p>
+                  <p className="text-xs text-gray-400">{o.due_date < today ? 'venceu' : 'vence'} {formatDateBR(o.due_date)}</p>
                 </div>
                 <p className="text-sm font-bold text-gray-800 whitespace-nowrap">{formatCurrency(o.total_amount)}</p>
               </div>
@@ -121,8 +113,8 @@ export default function DashboardClient({ orders, payments, clients, initialBala
         <div className="card p-6">
           <h2 className="font-semibold text-gray-800 mb-4">Últimos Pagamentos</h2>
           <div className="space-y-3">
-            {recentPayments.length === 0 && <p className="text-sm text-gray-400">Nenhum pagamento encontrado</p>}
-            {recentPayments.map((p: any) => (
+            {filteredRecentPayments.length === 0 && <p className="text-sm text-gray-400">Nenhum pagamento encontrado</p>}
+            {filteredRecentPayments.slice(0, 5).map((p: any) => (
               <div key={p.id} className="flex items-center justify-between">
                 <p className="text-sm text-gray-600">{formatDateBR(p.payment_date)}</p>
                 <p className="text-sm font-bold text-green-700">{formatCurrency(p.amount)}</p>
