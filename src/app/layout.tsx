@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Link href="/relatorios" className="hover:text-gray-300">Relatórios</Link>
         </nav>
         <main>{children}</main>
-        <footer className="text-center text-xs text-gray-400 py-3 print:hidden">v01 — 26/05/2026 17:28</footer>
+        <footer className="text-center text-xs text-gray-400 py-3 print:hidden">v01 — 26/05/2026 14:28</footer>
       </body>
     </html>
   );
