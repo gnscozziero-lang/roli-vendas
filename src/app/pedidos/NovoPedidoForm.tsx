@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createOrder } from '@/lib/actions';
 import { Item, Client } from '@/types';
-import { getDueDate, toISO } from '@/lib/billing';
 
 // ─── ItemQtyInput DEFINED OUTSIDE PARENT — prevents focus loss bug ────────────
 function ItemQtyInput({
@@ -27,6 +26,21 @@ function ItemQtyInput({
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+function calcDueDate(orderDate: string): string {
+  const d = new Date(orderDate + 'T12:00:00');
+  const day = d.getDate();
+  const month = d.getMonth();
+  const year = d.getFullYear();
+  if (day <= 15) {
+    // due on 30th of same month
+    return `${year}-${String(month + 1).padStart(2, '0')}-30`;
+  } else {
+    // due on 30th of next month
+    const next = new Date(year, month + 1, 30);
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-30`;
+  }
+}
+
 interface Props {
   items: Item[];
   clients: Client[];
@@ -36,19 +50,17 @@ export default function NovoPedidoForm({ items, clients }: Props) {
   const today = new Date().toISOString().split('T')[0];
 
   const [orderDate, setOrderDate] = useState(today);
-  const [dueDate, setDueDate] = useState('');
+  const [dueDate, setDueDate] = useState(calcDueDate(today));
   const [description, setDescription] = useState('');
   const [client, setClient] = useState(clients[0]?.name ?? '');
-  const [quantities, setQuantities] = useState<Record<number, number>>({});
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
 
-  // Recalculate suggested due_date whenever orderDate changes
   useEffect(() => {
-    const suggested = toISO(getDueDate(new Date(orderDate + 'T12:00:00')));
-    setDueDate(suggested);
+    setDueDate(calcDueDate(orderDate));
   }, [orderDate]);
 
-  const setQty = useCallback((id: number, val: number) => {
+  const setQty = useCallback((id: string, val: number) => {
     setQuantities(prev => ({ ...prev, [id]: val }));
   }, []);
 
@@ -113,7 +125,6 @@ export default function NovoPedidoForm({ items, clients }: Props) {
       <h2 className="text-lg font-semibold">Novo Pedido</h2>
 
       <div className="grid grid-cols-2 gap-4">
-        {/* Client */}
         <div>
           <label className="block text-sm font-medium mb-1">Cliente *</label>
           <select
@@ -129,7 +140,6 @@ export default function NovoPedidoForm({ items, clients }: Props) {
           </select>
         </div>
 
-        {/* Order date */}
         <div>
           <label className="block text-sm font-medium mb-1">Data do Pedido</label>
           <input
@@ -141,11 +151,10 @@ export default function NovoPedidoForm({ items, clients }: Props) {
           />
         </div>
 
-        {/* Due date — pre-filled but editable */}
         <div>
           <label className="block text-sm font-medium mb-1">
             Vencimento
-            <span className="ml-2 text-xs font-normal text-gray-400">(sugerido pelo ciclo — editável)</span>
+            <span className="ml-2 text-xs font-normal text-gray-400">(sugerido — editável)</span>
           </label>
           <input
             type="date"
@@ -156,7 +165,6 @@ export default function NovoPedidoForm({ items, clients }: Props) {
           />
         </div>
 
-        {/* Description */}
         <div>
           <label className="block text-sm font-medium mb-1">Descrição</label>
           <input
@@ -169,13 +177,11 @@ export default function NovoPedidoForm({ items, clients }: Props) {
         </div>
       </div>
 
-      {/* Items */}
       <div className="border rounded p-4">
         {renderItemGroup(regularItems, 'Itens')}
         {renderItemGroup(hardwareItems, 'Hardware / Pinos / Buchas')}
       </div>
 
-      {/* Total + submit */}
       <div className="flex items-center justify-between pt-2">
         <span className="text-sm font-medium">
           Total: <span className="text-blue-700 font-bold">R$ {total.toFixed(2)}</span>
