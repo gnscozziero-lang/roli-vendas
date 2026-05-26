@@ -224,9 +224,16 @@ export async function importData(data: {
   }
 
   revalidatePath('/');
+  return { orders: data.orders.length, payments: data.payments.length, items: data.items.length };
 }
 
 // ─── ALIASES — compatibilidade com código existente ──────────────────────────
 export const addItem = createItem;
 export const updateItem = updateItemPrice;
-export const runImport = importData;
+
+// runImport aceita string JSON (vindo do ImportForm) ou objeto
+export async function runImport(input: string | { orders: any[]; payments: any[]; items: any[] }) {
+  const data = typeof input === 'string' ? JSON.parse(input) : input;
+  const result = await importData(data);
+  return result;
+}
