@@ -8,22 +8,28 @@ interface Props {
   orders: Order[]
   payments: Payment[]
   clients: Client[]
-  initialBalance: number
+  balanceMap: Record<string, number>
   recentOrders: Order[]
   recentPayments: Payment[]
 }
 
-export default function DashboardClient({ orders, payments, clients, initialBalance, recentOrders, recentPayments }: Props) {
+export default function DashboardClient({ orders, payments, clients, balanceMap, recentOrders, recentPayments }: Props) {
   const [selectedClient, setSelectedClient] = useState('')
 
   const filteredOrders = selectedClient ? orders.filter(o => o.client === selectedClient) : orders
   const filteredPayments = selectedClient ? payments.filter(p => p.client === selectedClient) : payments
-  const filteredRecentOrders = selectedClient ? recentOrders.filter(o => o.client === selectedClient) : recentOrders
-  const filteredRecentPayments = selectedClient ? recentPayments.filter(p => p.client === selectedClient) : recentPayments
-  const balanceToUse = selectedClient ? 0 : initialBalance
+  const filteredRecentOrders = selectedClient ? recentOrders.filter(o => o.client === selectedClient).slice(0, 5) : recentOrders.slice(0, 5)
+  const filteredRecentPayments = selectedClient ? recentPayments.filter(p => p.client === selectedClient).slice(0, 5) : recentPayments.slice(0, 5)
+
+  // Pick the right initial balance:
+  // - specific client selected → use initial_balance_CLIENTNAME if exists, else 0
+  // - no client selected (all) → use global initial_balance
+  const initialBalance = selectedClient
+    ? (balanceMap[`initial_balance_${selectedClient}`] ?? 0)
+    : (balanceMap['initial_balance'] ?? 0)
 
   const { cycles, total_open, overdue_amount, next_due_amount, next_due_date } =
-    calculateBalances(filteredOrders as any, filteredPayments as any, balanceToUse)
+    calculateBalances(filteredOrders as any, filteredPayments as any, initialBalance)
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -98,7 +104,7 @@ export default function DashboardClient({ orders, payments, clients, initialBala
           <h2 className="font-semibold text-gray-800 mb-4">Últimos Pedidos</h2>
           <div className="space-y-3">
             {filteredRecentOrders.length === 0 && <p className="text-sm text-gray-400">Nenhum pedido encontrado</p>}
-            {filteredRecentOrders.slice(0, 5).map((o: any) => (
+            {filteredRecentOrders.map((o: any) => (
               <div key={o.id} className="flex items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-medium text-gray-800">{formatDateBR(o.order_date)}</p>
@@ -114,7 +120,7 @@ export default function DashboardClient({ orders, payments, clients, initialBala
           <h2 className="font-semibold text-gray-800 mb-4">Últimos Pagamentos</h2>
           <div className="space-y-3">
             {filteredRecentPayments.length === 0 && <p className="text-sm text-gray-400">Nenhum pagamento encontrado</p>}
-            {filteredRecentPayments.slice(0, 5).map((p: any) => (
+            {filteredRecentPayments.map((p: any) => (
               <div key={p.id} className="flex items-center justify-between">
                 <p className="text-sm text-gray-600">{formatDateBR(p.payment_date)}</p>
                 <p className="text-sm font-bold text-green-700">{formatCurrency(p.amount)}</p>

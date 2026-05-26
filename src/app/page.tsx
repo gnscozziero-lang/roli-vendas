@@ -29,10 +29,14 @@ export default async function DashboardPage() {
     due_date_ref: r.due_date_ref ? toISO(r.due_date_ref) : null,
   }))
 
-  const settingRows = await sql`SELECT value FROM settings WHERE key = 'initial_balance'` as any[]
-  const initialBalance = settingRows.length > 0 ? Number(settingRows[0].value) : 0
+  // Fetch all initial_balance settings (global + per client)
+  const settingRows = await sql`SELECT key, value FROM settings WHERE key LIKE 'initial_balance%'` as any[]
+  const balanceMap: Record<string, number> = {}
+  for (const row of settingRows) {
+    balanceMap[row.key] = Number(row.value)
+  }
 
-  const recentOrderRows = await sql`SELECT * FROM orders ORDER BY order_date DESC, id DESC LIMIT 5` as any[]
+  const recentOrderRows = await sql`SELECT * FROM orders ORDER BY order_date DESC, id DESC LIMIT 20` as any[]
   const recentOrders = recentOrderRows.map((r: any) => ({
     ...r,
     order_date: toISO(r.order_date),
@@ -40,7 +44,7 @@ export default async function DashboardPage() {
     total_amount: Number(r.total_amount),
   }))
 
-  const recentPaymentRows = await sql`SELECT * FROM payments ORDER BY payment_date DESC, id DESC LIMIT 5` as any[]
+  const recentPaymentRows = await sql`SELECT * FROM payments ORDER BY payment_date DESC, id DESC LIMIT 20` as any[]
   const recentPayments = recentPaymentRows.map((r: any) => ({
     ...r,
     amount: Number(r.amount),
@@ -60,7 +64,7 @@ export default async function DashboardPage() {
         orders={orders}
         payments={payments}
         clients={clients}
-        initialBalance={initialBalance}
+        balanceMap={balanceMap}
         recentOrders={recentOrders}
         recentPayments={recentPayments}
       />
