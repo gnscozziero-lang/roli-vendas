@@ -12,7 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt-BR">
       <body>
         <nav id="main-nav" className="bg-green-800 h-14 flex items-center px-6 print:hidden">
-          <span className="text-white font-bold text-lg mr-8">🔑 Roli Vendas</span>
+          <span className="text-white font-bold text-lg mr-8">🔑 Vendas</span>
           <div className="flex items-center gap-6 text-sm flex-1">
             <Link href="/" className="text-green-100 hover:text-white transition-colors">Dashboard</Link>
             <Link href="/pedidos" className="text-green-100 hover:text-white transition-colors">Pedidos</Link>

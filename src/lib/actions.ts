@@ -26,16 +26,23 @@ export async function getActiveClients() {
 export async function createClient(name: string) {
   await sql`INSERT INTO clients (name) VALUES (${name.trim().toUpperCase()})`;
   revalidatePath('/clientes');
+  revalidatePath('/pedidos');
+  revalidatePath('/pagamentos');
+  revalidatePath('/');
 }
 
 export async function updateClient(id: string, name: string) {
   await sql`UPDATE clients SET name = ${name.trim().toUpperCase()} WHERE id = ${id}`;
   revalidatePath('/clientes');
+  revalidatePath('/pedidos');
+  revalidatePath('/pagamentos');
 }
 
 export async function toggleClientActive(id: string, active: boolean) {
   await sql`UPDATE clients SET active = ${active} WHERE id = ${id}`;
   revalidatePath('/clientes');
+  revalidatePath('/pedidos');
+  revalidatePath('/pagamentos');
 }
 
 // ─── ITEMS ───────────────────────────────────────────────────────────────────
