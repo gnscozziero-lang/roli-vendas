@@ -54,50 +54,85 @@ export function todayISO(): string {
   return formatDateISO(new Date())
 }
 
+/**
+ * Modelo de saldo por CICLO ISOLADO.
+ *
+ * Cada vencimento (due_date) é tratado como um ciclo independente:
+ *   saldo do ciclo = pedidos daquele vencimento − pagamentos vinculados (due_date_ref) àquele MESMO vencimento.
+ *
+ * Pagamentos que excedem o ciclo ao qual estão vinculados (sobra), ou que apontam para um
+ * due_date_ref sem pedido correspondente (órfão), rolam para a frente cronologicamente,
+ * abatendo o próximo ciclo aberto. Pagamentos sem due_date_ref (legado/não vinculados) entram
+ * no início da fila e são aplicados ao ciclo aberto mais antigo primeiro — mesmo comportamento
+ * de "abater do mais antigo para o mais novo" já usado para o saldo inicial.
+ *
+ * Se, depois de percorrer todos os ciclos conhecidos, ainda restar saldo de pagamento sem
+ * vencimento para absorvê-lo, esse valor é reportado como `customer_advance`
+ * ("adiantamento do cliente") — não vinculado a nenhuma data específica.
+ */
 export function calculateBalances(
   orders: { due_date: string | Date | unknown; total_amount: number | unknown }[],
-  payments: { amount: number | unknown }[],
+  payments: { amount: number | unknown; due_date_ref?: string | Date | unknown }[],
   initialBalance: number
 ): BalanceSummary {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
-  const cycleMap = new Map<string, number>()
-
+  // 1. Débitos por ciclo (pedidos + saldo inicial, se houver)
+  const cycleTotals = new Map<string, number>()
   if (initialBalance > 0) {
-    cycleMap.set('2022-12-30', initialBalance)
+    cycleTotals.set('2022-12-30', initialBalance)
   }
-
   for (const order of orders) {
     const dueDateStr = toISOString(order.due_date)
     const amount = Number(order.total_amount)
     if (!dueDateStr || isNaN(amount)) continue
-    const prev = cycleMap.get(dueDateStr) ?? 0
-    cycleMap.set(dueDateStr, prev + amount)
+    cycleTotals.set(dueDateStr, round2((cycleTotals.get(dueDateStr) ?? 0) + amount))
   }
 
-  const cycles: CycleBalance[] = Array.from(cycleMap.entries())
-    .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
-    .map(([due_date, total]) => {
-      const dueDate = new Date(due_date + 'T12:00:00')
-      return {
-        due_date,
-        total_orders: total,
-        remaining: total,
-        is_overdue: dueDate < today,
-        is_next_due: false,
-      }
+  // 2. Créditos por ciclo, conforme due_date_ref. Pagamentos sem due_date_ref formam um
+  //    pool "não vinculado" que entra antes do primeiro ciclo da linha do tempo.
+  const paymentBuckets = new Map<string, number>()
+  let unassigned = 0
+  for (const payment of payments) {
+    const amount = Number(payment.amount)
+    if (isNaN(amount)) continue
+    const ref = payment.due_date_ref ? toISOString(payment.due_date_ref) : ''
+    if (ref) {
+      paymentBuckets.set(ref, round2((paymentBuckets.get(ref) ?? 0) + amount))
+    } else {
+      unassigned = round2(unassigned + amount)
+    }
+  }
+
+  // 3. União de todas as datas com débito e/ou crédito vinculado, em ordem cronológica
+  const allDates = new Set<string>(Array.from(cycleTotals.keys()).concat(Array.from(paymentBuckets.keys())))
+  const sortedDates = Array.from(allDates).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+
+  // 4. Caminhada cronológica: sobra/órfão/não-vinculado carrega para o próximo ciclo
+  let carry = unassigned
+  const allCycles: CycleBalance[] = []
+  for (const due_date of sortedDates) {
+    const owed = cycleTotals.get(due_date) ?? 0
+    const available = round2((paymentBuckets.get(due_date) ?? 0) + carry)
+    const applied = Math.min(available, owed)
+    const remaining = round2(owed - applied)
+    carry = round2(available - applied)
+
+    const dueDate = new Date(due_date + 'T12:00:00')
+    allCycles.push({
+      due_date,
+      total_orders: owed,
+      remaining,
+      is_overdue: remaining > 0 && dueDate < today,
+      is_next_due: false,
     })
-
-  let remainingPayments = payments.reduce((s, p) => s + Number(p.amount), 0)
-  for (const cycle of cycles) {
-    if (remainingPayments <= 0) break
-    const covered = Math.min(remainingPayments, cycle.remaining)
-    cycle.remaining   = round2(cycle.remaining - covered)
-    remainingPayments = round2(remainingPayments - covered)
   }
 
-  const openCycles = cycles.filter(c => c.remaining > 0)
+  // Sobra final, sem nenhum ciclo futuro conhecido para absorver = adiantamento do cliente
+  const customer_advance = round2(Math.max(carry, 0))
+
+  const openCycles = allCycles.filter(c => c.remaining > 0)
 
   const futureCycles = openCycles.filter(c => {
     const due = new Date(c.due_date + 'T12:00:00')
@@ -114,7 +149,9 @@ export function calculateBalances(
     next_due_date:   nextDue?.due_date  ?? null,
     next_due_amount: nextDue?.remaining ?? 0,
     overdue_amount,
+    customer_advance,
     cycles: openCycles,
+    all_cycles: allCycles,
   }
 }
 
