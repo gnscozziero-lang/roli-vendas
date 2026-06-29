@@ -8,6 +8,10 @@ function toISO(val: any): string {
   return String(val).substring(0, 10)
 }
 
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const due_date = searchParams.get('due_date')
@@ -38,34 +42,49 @@ export async function GET(req: NextRequest) {
     due_date_ref: r.due_date_ref ? toISO(r.due_date_ref) : null,
   }))
 
-  // Use calculateBalances to get correct overdue/upcoming/total
-  const initialBalance = 0 // extrato uses raw balances; dashboard handles initial_balance separately
-  const { cycles, total_open, overdue_amount, next_due_amount } =
+  // Modelo isolado por ciclo: cada vencimento é abatido apenas pelos pagamentos vinculados
+  // a ele (due_date_ref); sobra ou pagamento órfão rola para o próximo ciclo aberto.
+  const initialBalance = 0 // extrato usa saldos brutos; dashboard trata initial_balance separadamente
+  const { all_cycles, total_open, customer_advance } =
     calculateBalances(allOrders as any, allPayments as any, initialBalance)
 
-  // Determine target cycle
-  const targetDue = due_date || cycles[0]?.due_date
+  // Data de referência do relatório: a selecionada pelo usuário, ou o primeiro ciclo aberto
+  const targetDue: string | null =
+    due_date || all_cycles.find(c => c.remaining > 0)?.due_date || all_cycles[0]?.due_date || null
 
-  // Orders for this specific cycle only
-  const cycleOrders = targetDue
-    ? allOrders.filter(o => o.due_date === targetDue)
+  // Classificação relativa à DATA SELECIONADA no relatório (não à data de hoje):
+  //  - Em atraso:  ciclos anteriores à selecionada, com saldo > 0
+  //  - Selecionado: o ciclo exatamente na data selecionada (mostrado mesmo com saldo 0)
+  //  - Próximos:   ciclos posteriores à selecionada, com saldo > 0
+  const overdueCycles = targetDue
+    ? all_cycles.filter(c => c.due_date < targetDue && c.remaining > 0)
     : []
-
-  // Payments: ONLY those explicitly linked to this cycle via due_date_ref
-  // Do NOT use date-range fallback — it brings in all historical payments
-  const cyclePayments = targetDue
-    ? allPayments.filter(p => p.due_date_ref === targetDue)
+  const upcomingCycles = targetDue
+    ? all_cycles.filter(c => c.due_date > targetDue && c.remaining > 0)
     : []
+  const selectedCycle = targetDue
+    ? all_cycles.find(c => c.due_date === targetDue) ??
+      { due_date: targetDue, total_orders: 0, remaining: 0, is_overdue: false, is_next_due: false }
+    : null
 
-  const cycle = targetDue ? (cycles as any[]).find(c => c.due_date === targetDue) : null
+  const overdue_total = round2(overdueCycles.reduce((s, c) => s + c.remaining, 0))
+  const upcoming_total = round2(upcomingCycles.reduce((s, c) => s + c.remaining, 0))
+
+  // Pedidos e pagamentos detalhados do ciclo selecionado
+  const cycleOrders = targetDue ? allOrders.filter(o => o.due_date === targetDue) : []
+  const cyclePayments = targetDue ? allPayments.filter(p => p.due_date_ref === targetDue) : []
 
   return NextResponse.json({
     due_date: targetDue,
-    overdue: overdue_amount,
-    upcoming: cycle?.remaining ?? 0,
+    overdue_cycles: overdueCycles,
+    overdue_total,
+    selected_cycle: selectedCycle,
+    upcoming_cycles: upcomingCycles,
+    upcoming_total,
+    customer_advance,
     total_open,
     orders: cycleOrders,
     payments: cyclePayments,
-    cycles,
+    cycles: all_cycles,
   })
 }
