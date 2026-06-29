@@ -54,5 +54,7 @@ export interface BalanceSummary {
   next_due_date: string | null
   next_due_amount: number
   overdue_amount: number
+  customer_advance: number
   cycles: CycleBalance[]
+  all_cycles: CycleBalance[]
 }
