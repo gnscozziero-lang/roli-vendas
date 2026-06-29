@@ -35,6 +35,32 @@ independente da data em que foi efetivamente pago.
 
 ---
 
+## Autenticação (29/06/2026)
+
+O sistema é protegido por **senha única** (não há usuários individuais).
+Login em `/login` grava um cookie de sessão assinado, válido por **1 ano**
+— por isso, no uso normal, você não precisa logar de novo a cada acesso,
+mesmo trocando de computador (basta logar uma vez em cada navegador).
+
+Implementação: `src/middleware.ts` bloqueia todas as rotas exceto `/login`;
+`src/lib/auth.ts` assina/verifica o cookie via HMAC-SHA256 (Web Crypto,
+sem dependência de banco). Duas variáveis de ambiente novas:
+
+| Variável | Para que serve |
+|----------|-----------------|
+| `APP_PASSWORD` | a senha de acesso ao sistema |
+| `AUTH_SECRET` | chave aleatória usada para assinar o cookie de sessão (gerar com `openssl rand -hex 32`, nunca reaproveitar) |
+
+**Atenção:** uma senha simples (e o login sem limite de tentativas) não
+resiste a um ataque de força bruta automatizado contra `/login`. Isso é
+um risco residual aceito conscientemente nesta etapa — não é proteção de
+nível corporativo, é uma trava contra acesso casual/não autorizado. Se o
+sistema crescer (mais clientes, mais dados sensíveis, mais gente sabendo
+da URL), vale revisitar com algo mais robusto (limite de tentativas, login
+por usuário, etc.).
+
+---
+
 ## Passo a passo de deploy (Neon + GitHub + Vercel)
 
 ### 1. Neon — banco de dados gratuito
@@ -59,11 +85,16 @@ git push -u origin main
 
 1. Acesse [vercel.com](https://vercel.com) → **Add New Project**
 2. Importe o repositório do GitHub
-3. Em **Environment Variables**, adicione **apenas uma variável**:
+3. Em **Environment Variables**, adicione:
    ```
-   DATABASE_URL = postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require
+   DATABASE_URL  = postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require
+   APP_PASSWORD  = (a senha de acesso ao sistema — ver seção "Autenticação")
+   AUTH_SECRET   = (gerar com: openssl rand -hex 32 — ver seção "Autenticação")
    ```
 4. Clique em **Deploy** — aguarde ~2 minutos
+5. Ao adicionar/alterar `APP_PASSWORD` ou `AUTH_SECRET` num projeto já
+   existente, é preciso **redeployar manualmente** (Deployments → ⋯ →
+   Redeploy) — adicionar a variável não atualiza deployments já feitos
 
 ### 4. Importação histórica (já realizada nesta instância)
 
@@ -97,9 +128,16 @@ npm run dev
 
 ```
 src/
-├── app/
-│   ├── page.tsx              Dashboard (+ DashboardClient.tsx)
-│   ├── clientes/             Cadastro de clientes
+├── middleware.ts          Gate de senha — protege todas as rotas exceto /login
+├── lib/
+│   └── auth.ts            Assina/verifica o cookie de sessão (HMAC, Web Crypto)
+└── app/
+    ├── NavBar.tsx          Menu superior — oculto em /login
+    ├── login/
+    │   ├── page.tsx        Tela de senha
+    │   └── actions.ts      Server Action que valida APP_PASSWORD e grava o cookie
+    ├── page.tsx              Dashboard (+ DashboardClient.tsx)
+    ├── clientes/             Cadastro de clientes
 │   ├── pedidos/              Gestão de pedidos (NovoPedidoForm, EditOrderModal, EditarPedidoForm)
 │   ├── pagamentos/           Gestão de pagamentos
 │   ├── itens/                Catálogo de itens
