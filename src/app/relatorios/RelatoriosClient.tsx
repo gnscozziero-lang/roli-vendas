@@ -139,41 +139,45 @@ export default function RelatoriosClient({ clients }: { clients: Client[] }) {
 
     const dueLabel = fmtBR(data.due_date ?? extratoDue)
     const hoje = fmtBR(new Date().toISOString().split('T')[0])
-    const overdue = Number(data.overdue ?? 0)
-    const upcoming = Number(data.upcoming ?? 0)
+
+    const overdueCycles: any[] = data.overdue_cycles ?? []
+    const upcomingCycles: any[] = data.upcoming_cycles ?? []
+    const selectedCycle = data.selected_cycle ?? { due_date: data.due_date, total_orders: 0, remaining: 0 }
+    const overdueTotal = Number(data.overdue_total ?? 0)
+    const upcomingTotal = Number(data.upcoming_total ?? 0)
+    const customerAdvance = Number(data.customer_advance ?? 0)
     const totalOpen = Number(data.total_open ?? 0)
+
     const orders = data.orders ?? []
     const payments = data.payments ?? []
     const subtotalPedidos = orders.reduce((s: number, o: any) => s + Number(o.total_amount), 0)
     const subtotalPagamentos = payments.reduce((s: number, p: any) => s + Number(p.amount), 0)
-    const totalDevedor = overdue + upcoming + subtotalPedidos
+    const selecionadoRemaining = Number(selectedCycle.remaining ?? 0)
 
     let rows = ''
 
-    // 1. Saldo em atraso
-    if (overdue > 0) {
-      rows += `<tr class="section-title"><td colspan="4">SALDO EM ATRASO (ciclos vencidos antes de ${hoje})</td></tr>
-      <tr>
-        <td>—</td>
-        <td>Saldo de ciclos vencidos em aberto</td>
-        <td class="right" style="color:#dc2626;font-weight:bold">${fmtCurrency(overdue)}</td>
-        <td class="right">—</td>
+    // 1. Em atraso — cada ciclo com sua própria data de vencimento original (não se sobrepõe ao selecionado)
+    rows += `<tr class="section-title"><td colspan="4">EM ATRASO (vencimentos anteriores a ${dueLabel})</td></tr>`
+    if (overdueCycles.length === 0) {
+      rows += `<tr><td colspan="4" style="color:#999;padding:6px 8px">Nenhum valor em atraso.</td></tr>`
+    } else {
+      for (const c of overdueCycles) {
+        rows += `<tr>
+          <td>${fmtBR(c.due_date)}</td>
+          <td>Saldo em aberto — vencimento ${fmtBR(c.due_date)}</td>
+          <td class="right" style="color:#dc2626;font-weight:bold">${fmtCurrency(Number(c.remaining))}</td>
+          <td class="right">—</td>
+        </tr>`
+      }
+      rows += `<tr class="total-row">
+        <td colspan="2">Subtotal em Atraso</td>
+        <td class="right" style="color:#dc2626">${fmtCurrency(overdueTotal)}</td>
+        <td></td>
       </tr>`
     }
 
-    // 2. Saldo a vencer
-    if (upcoming > 0) {
-      rows += `<tr class="section-title"><td colspan="4">SALDO A VENCER (ciclos futuros em aberto)</td></tr>
-      <tr>
-        <td>—</td>
-        <td>Saldo de ciclos ainda não vencidos</td>
-        <td class="right" style="color:#d97706;font-weight:bold">${fmtCurrency(upcoming)}</td>
-        <td class="right">—</td>
-      </tr>`
-    }
-
-    // 3. Pedidos do ciclo
-    rows += `<tr class="section-title"><td colspan="4">PEDIDOS DO CICLO — vencimento ${dueLabel}</td></tr>`
+    // 2. Vencimento selecionado — pedidos e pagamentos do próprio ciclo (sempre exibido, mesmo com saldo zero)
+    rows += `<tr class="section-title"><td colspan="4">VENCIMENTO SELECIONADO — ${dueLabel}</td></tr>`
     if (orders.length === 0) {
       rows += `<tr><td colspan="4" style="color:#999;padding:6px 8px">Nenhum pedido neste ciclo.</td></tr>`
     } else {
@@ -191,20 +195,8 @@ export default function RelatoriosClient({ clients }: { clients: Client[] }) {
       <td class="right">${fmtCurrency(subtotalPedidos)}</td>
       <td></td>
     </tr>`
-
-    // 4. Total devedor
-    if (overdue > 0 || upcoming > 0) {
-      rows += `<tr class="total-row">
-        <td colspan="2">TOTAL DEVEDOR (atraso + a vencer + ciclo atual)</td>
-        <td class="right">${fmtCurrency(totalDevedor)}</td>
-        <td></td>
-      </tr>`
-    }
-
-    // 5. Pagamentos
-    rows += `<tr class="section-title"><td colspan="4">PAGAMENTOS RECEBIDOS — referentes ao vencimento ${dueLabel}</td></tr>`
     if (payments.length === 0) {
-      rows += `<tr><td colspan="4" style="color:#999;padding:6px 8px">Nenhum pagamento registrado.</td></tr>`
+      rows += `<tr><td colspan="4" style="color:#999;padding:6px 8px">Nenhum pagamento registrado para este vencimento.</td></tr>`
     } else {
       for (const p of payments) {
         rows += `<tr class="pgto">
@@ -219,6 +211,42 @@ export default function RelatoriosClient({ clients }: { clients: Client[] }) {
       <td colspan="3">Subtotal Pagamentos</td>
       <td class="right">${fmtCurrency(subtotalPagamentos)}</td>
     </tr>`
+    rows += `<tr class="total-row">
+      <td colspan="2">Saldo do Vencimento Selecionado</td>
+      <td class="right" style="color:${selecionadoRemaining > 0 ? '#dc2626' : '#15803d'}">${fmtCurrency(selecionadoRemaining)}</td>
+      <td></td>
+    </tr>`
+
+    // 3. Próximos vencimentos — cada ciclo futuro com sua própria data (exclui o selecionado)
+    rows += `<tr class="section-title"><td colspan="4">PRÓXIMOS VENCIMENTOS (após ${dueLabel})</td></tr>`
+    if (upcomingCycles.length === 0) {
+      rows += `<tr><td colspan="4" style="color:#999;padding:6px 8px">Nenhum vencimento futuro em aberto.</td></tr>`
+    } else {
+      for (const c of upcomingCycles) {
+        rows += `<tr>
+          <td>${fmtBR(c.due_date)}</td>
+          <td>Saldo em aberto — vencimento ${fmtBR(c.due_date)}</td>
+          <td class="right" style="color:#d97706;font-weight:bold">${fmtCurrency(Number(c.remaining))}</td>
+          <td class="right">—</td>
+        </tr>`
+      }
+      rows += `<tr class="total-row">
+        <td colspan="2">Subtotal Próximos Vencimentos</td>
+        <td class="right" style="color:#d97706">${fmtCurrency(upcomingTotal)}</td>
+        <td></td>
+      </tr>`
+    }
+
+    // 4. Adiantamento do cliente — crédito sem vencimento específico para absorvê-lo, se houver
+    if (customerAdvance > 0) {
+      rows += `<tr class="section-title"><td colspan="4">ADIANTAMENTO DO CLIENTE</td></tr>
+      <tr class="pgto">
+        <td>—</td>
+        <td>Crédito não vinculado a um vencimento específico</td>
+        <td class="right">—</td>
+        <td class="right">${fmtCurrency(customerAdvance)}</td>
+      </tr>`
+    }
 
     const html = `
       <header>
@@ -236,7 +264,7 @@ export default function RelatoriosClient({ clients }: { clients: Client[] }) {
         </thead>
         <tbody>${rows}</tbody>
       </table>
-      <div class="saldo-final">Saldo em aberto: <span>${fmtCurrency(totalOpen)}</span></div>`
+      <div class="saldo-final">Saldo em aberto (total geral): <span>${fmtCurrency(totalOpen)}</span></div>`
 
     emitirPDF(html, 'Extrato por Vencimento')
   }
@@ -290,7 +318,7 @@ export default function RelatoriosClient({ clients }: { clients: Client[] }) {
           <label className="label">Vencimento</label>
           <input type="date" value={extratoDue} onChange={e => setExtratoDue(e.target.value)} className="input" />
         </div>
-        <p className="text-xs text-gray-400">Pagamentos são abatidos do ciclo mais antigo primeiro.</p>
+        <p className="text-xs text-gray-400">Pagamentos são vinculados ao vencimento informado; eventual sobra é aplicada ao próximo ciclo aberto.</p>
         <button onClick={gerarExtratoPDF} disabled={loadingExtrato} className="btn-primary w-full">
           {loadingExtrato ? 'Gerando…' : '📄 Gerar PDF'}
         </button>
